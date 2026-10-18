@@ -26,7 +26,7 @@
 
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
@@ -46,6 +46,9 @@ const MAX_SCAN_DEPTH = 5
 const MAX_SCAN_FILES = 600
 /** Cap on a file read while scanning (a 40 MB generated module is not a scene). */
 const MAX_SCAN_BYTES = 512 * 1024
+
+/** Cap on the client-failure log; the tail is kept, the head is dropped. */
+const CLIENT_LOG_LIMIT = 256 * 1024
 
 /** The gate verdict for one root. */
 export type GateVerdict = { ok: true; canonical: string } | { ok: false; error: string }
@@ -956,6 +959,36 @@ export class ManimService {
   // --- runtime probe -----------------------------------------------------
 
   /** Whether the bundled runtime is usable, cached for a minute. */
+  /**
+   * Append a browser-side failure to a file next to the render cache.
+   *
+   * Written for one reason: when the panel is what breaks, the renderer console is
+   * not reachable, and "nothing showed up" is not a report. The file is bounded by
+   * truncating from the head.
+   *
+   * @param entry - the failure the panel reported.
+   */
+  async appendClientLog(entry: { where?: unknown; message?: unknown; stack?: unknown }): Promise<void> {
+    const line = JSON.stringify({
+      at: new Date().toISOString(),
+      where: typeof entry.where === 'string' ? entry.where : '',
+      message: typeof entry.message === 'string' ? entry.message : String(entry.message ?? ''),
+      stack: typeof entry.stack === 'string' ? entry.stack.slice(0, 4000) : '',
+    }) + String.fromCharCode(10)
+    const file = join(this.config.cacheDir, 'client-failures.log')
+    try {
+      await mkdir(this.config.cacheDir, { recursive: true })
+      await appendFile(file, line, 'utf8')
+      const size = (await stat(file)).size
+      if (size > CLIENT_LOG_LIMIT) {
+        const kept = (await readFile(file, 'utf8')).slice(-Math.floor(CLIENT_LOG_LIMIT / 2))
+        await writeFile(file, kept, 'utf8')
+      }
+    } catch {
+      // Logging must never bubble: the caller is already reporting a failure.
+    }
+  }
+
   async probe(force = false): Promise<Record<string, unknown>> {
     if (!force && this.probeCache !== null && Date.now() - this.probeCache.at < 60_000) {
       return this.probeCache.value

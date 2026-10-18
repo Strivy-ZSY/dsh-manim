@@ -89,66 +89,55 @@ export function VideoBody(props: VideoBodyOwner): JSX.Element {
  * @param ctx - client root context.
  */
 export function registerVideoPreview(ctx: ClientContext): void {
-  // Reading an uninjected service off a Cordis context THROWS — it does not
-  // return undefined. A bare `ctx.documentPreviews` on a shell without the
-  // document-preview service therefore fails the whole client activation, which
-  // takes startup down with it (this exact line did exactly that). Every read
-  // and every registration below is inside the guard.
-  let runtime: {
-    documentPreviews?: { register?: (definition: Record<string, unknown>) => unknown }
-    slots?: { inject?: (...args: unknown[]) => unknown; register?: (...args: unknown[]) => unknown }
-    effect?: (fn: () => unknown, label?: string) => unknown
+  // A service is only readable after it is injected — reading it off the raw
+  // context throws (and, unguarded, that killed startup once). `ctx.inject` is the
+  // Cordis way to depend on a service *optionally*: the callback runs when the
+  // service appears and never runs when the shell does not offer it, so a host
+  // without document previews still gets the studio.
+  const runtime = ctx as unknown as {
+    inject?: (names: string[], callback: (scope: Record<string, unknown>) => unknown) => unknown
   }
+  if (typeof runtime.inject !== 'function') return
   try {
-    runtime = ctx as unknown as typeof runtime
-  } catch {
-    return
-  }
-  let previews: { register?: (definition: Record<string, unknown>) => unknown } | undefined
-  try {
-    previews = runtime.documentPreviews
-  } catch {
-    // Shell has no document-preview service: nothing to extend, studio still works.
-    return
-  }
-  if (previews === undefined || typeof previews.register !== 'function') return
-  try {
-    previews.register({
-      id: VIDEO_PREVIEW_ID,
-      extensions: VIDEO_EXTENSIONS,
-      priority: 'extension',
-      loading: 'bytes-complete',
-      wrap: false,
-      title: () => t('video.title'),
+    runtime.inject(['documentPreviews'], (scope) => {
+      try {
+        registerOn(scope)
+      } catch (error) {
+        console.error('[dsh-manim] video preview registration failed:', error)
+      }
     })
   } catch (error) {
-    console.error('[dsh-manim] video preview registration failed:', error)
-    return
+    console.error('[dsh-manim] video preview injection failed:', error)
   }
-  try {
-    let slots: { inject?: unknown; register?: unknown } | undefined
-    try {
-      slots = runtime.slots
-    } catch {
-      return
-    }
-    if (slots === undefined || typeof slots.inject !== 'function' || typeof slots.register !== 'function') return
-    const typed = slots as {
-      inject: (name: string, fn: () => unknown) => unknown
-      register: (definition: Record<string, unknown>, body: unknown) => unknown
-    }
-    runtime.effect?.(
-      () => typed.inject('sidebar.right.tab.document', () => typed.register({
-        name: 'sidebar.right.tab.document',
-        key: VIDEO_PREVIEW_ID,
-        locale: 'manim',
-      }, function ManimVideoBody(owner: VideoBodyOwner): JSX.Element {
-        return <VideoBody {...owner} />
-      })),
-      'dsh-manim: video preview body',
-    )
-    console.info('[dsh-manim] video preview registered')
-  } catch (error) {
-    console.error('[dsh-manim] video preview body registration failed:', error)
-  }
+}
+
+/** Register the metadata and the body against an injected scope. */
+function registerOn(scope: Record<string, unknown>): void {
+  const previews = scope.documentPreviews as { register?: (definition: Record<string, unknown>) => unknown } | undefined
+  if (previews === undefined || typeof previews.register !== 'function') return
+  previews.register({
+    id: VIDEO_PREVIEW_ID,
+    extensions: VIDEO_EXTENSIONS,
+    priority: 'extension',
+    loading: 'bytes-complete',
+    wrap: false,
+    title: () => t('video.title'),
+  })
+  const slots = scope.slots as
+    | { inject?: (name: string, fn: () => unknown) => unknown; register?: (...args: unknown[]) => unknown }
+    | undefined
+  const effect = scope.effect as ((fn: () => unknown, label?: string) => unknown) | undefined
+  if (slots === undefined || typeof slots.inject !== 'function' || typeof slots.register !== 'function') return
+  const register = slots.register
+  effect?.(
+    () => slots.inject?.call(slots, 'sidebar.right.tab.document', () => register.call(slots, {
+      name: 'sidebar.right.tab.document',
+      key: VIDEO_PREVIEW_ID,
+      locale: 'manim',
+    }, function ManimVideoBody(owner: VideoBodyOwner): JSX.Element {
+      return <VideoBody {...owner} />
+    })),
+    'dsh-manim: video preview body',
+  )
+  console.info('[dsh-manim] video preview registered')
 }

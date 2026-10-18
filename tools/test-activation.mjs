@@ -122,6 +122,7 @@ const client = loaded.factory((name) => {
 check('client exports apply', typeof client.apply === 'function')
 check('client declares inject', Array.isArray(client.inject), JSON.stringify(client.inject))
 
+let registeredPreview = null
 const clientBase = {
   effect: (fn) => { try { fn() } catch {} },
   locale: { register: () => () => {} },
@@ -129,7 +130,14 @@ const clientBase = {
   sessions: { list: { getSnapshot: () => ({ items: [], current: undefined, state: 'idle' }), subscribe: () => () => {} } },
   sidebarRight: { openTab: () => {} },
   sidebarRightTabs: { register: () => () => {} },
-  documentPreviews: { register: () => {} },
+  documentPreviews: { register: (definition) => { registeredPreview = definition } },
+  // The optional-dependency channel: the callback runs only when the service is
+  // present, which is how the video preview registers.
+  inject: (names, callback) => {
+    const scope = {}
+    for (const name of names) if (clientBase[name] !== undefined) scope[name] = clientBase[name]
+    if (Object.keys(scope).length === names.length) callback({ ...clientBase, ...scope })
+  },
 }
 
 for (const [label, services] of [
@@ -145,6 +153,8 @@ for (const [label, services] of [
 }
 
 // ---------------------------------------------------------------------------
+check('video preview registers through the optional dependency', registeredPreview?.id === 'dsh-manim-video', JSON.stringify(registeredPreview?.extensions ?? null))
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length > 0) {
   console.log('\nfailures:')

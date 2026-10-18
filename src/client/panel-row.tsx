@@ -26,6 +26,7 @@ import { StudioMark, StudioRailGlyph } from './panel-icon.tsx'
 import { StudioTabTitle } from './tab-title.tsx'
 import { t } from './i18n.ts'
 import type { StudioRemote } from './api.ts'
+import { PanelBoundary, useMountReport } from './error-boundary.tsx'
 
 /** What the seats need from the plugin body. */
 export interface StudioSeats {
@@ -153,7 +154,14 @@ export function registerManimStudio(ctx: ClientContext, seats: StudioSeats): voi
     key: id,
     locale,
   }, function ManimPane(): JSX.Element {
-    return <StudioPane makeApi={makeApi} sessions={sessions} />
+    // A thrown body renders as an empty pane in the shell, which is
+    // indistinguishable from "the plugin does nothing". Keep the failure visible.
+    useMountReport('动画工作室')
+    return (
+      <PanelBoundary where="动画工作室">
+        <StudioPane makeApi={makeApi} sessions={sessions} />
+      </PanelBoundary>
+    )
   })), 'dsh-manim: 动画工作室 tab body')
 
   // The chip's content: the mark *and the title* — the seat renders only what

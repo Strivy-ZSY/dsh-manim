@@ -508,6 +508,17 @@ export function registerManimRoutes(
         }
         return
       }
+      case '/dsh-manim/client-log': {
+        // Browser-side failures land here so they survive the renderer: the panel
+        // itself may be the thing that is broken.
+        try {
+          await service.appendClientLog(payload as { where?: unknown; message?: unknown; stack?: unknown })
+        } catch {
+          // Never fail the request over logging.
+        }
+        json(res, { ok: true, value: { logged: true } })
+        return
+      }
       case '/dsh-manim/session-root': {
         const sessionId = (payload as { sessionId?: unknown }).sessionId
         const path = typeof sessionId === 'string' ? findWorkspaceRootForSession(ctx, sessionId) : null
