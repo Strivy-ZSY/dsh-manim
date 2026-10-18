@@ -180,6 +180,15 @@ writeFileSync(sceneFile, sceneSource, 'utf8')
 // A decoy: a Python file with no Scene subclass must not be listed.
 writeFileSync(path.join(workspace, 'animations', 'helper.py'), 'def add(a, b):\n    return a + b\n', 'utf8')
 
+// Another decoy, and the one that bit a user: a *library source checkout* inside
+// the workspace. Manim's own `manim/scene/*.py` define `class ZoomedScene(Scene)`
+// and were offered as if they were the user's scenes.
+const vendored = path.join(workspace, 'manim-main', 'manim', 'scene')
+mkdirSync(vendored, { recursive: true })
+writeFileSync(path.join(workspace, 'manim-main', 'pyproject.toml'), '[project]' + String.fromCharCode(10) + 'name = "manim"' + String.fromCharCode(10), 'utf8')
+writeFileSync(path.join(vendored, 'zoomed_scene.py'), 'from manim import Scene' + String.fromCharCode(10, 10, 10) + 'class ZoomedScene(Scene):' + String.fromCharCode(10) + '    def construct(self):' + String.fromCharCode(10) + '        pass' + String.fromCharCode(10), 'utf8')
+
+
 const config = mod.resolveConfig({ cacheDir: path.join(here, '.offline-tmp-cache'), outputDir: 'animations' })
 const { context, registrations } = makeContext()
 const engine = new mod.RenderEngine({ pythonPath: config.pythonPath, driverPath: config.driverPath, jobTtlSeconds: 300, renderTimeoutSeconds: 900 })
@@ -193,6 +202,7 @@ check('gate rejects an unregistered root', outside.ok === false)
 const scenes = await service.listScenes(workspace)
 check('scan finds the scene file', scenes.some((entry) => entry.path === sceneFile), JSON.stringify(scenes.map((entry) => entry.rel)))
 check('scan skips a python file with no Scene', !scenes.some((entry) => entry.rel.endsWith('helper.py')))
+check('a vendored library checkout is not offered as scenes', !scenes.some((entry) => entry.rel.includes('manim-main')), JSON.stringify(scenes.map((entry) => entry.rel)))
 check('scan lists the scene class', scenes[0]?.scenes.includes('OfflineDemo') === true, JSON.stringify(scenes[0]?.scenes))
 
 const resolved = await service.resolveSceneName(sceneFile)

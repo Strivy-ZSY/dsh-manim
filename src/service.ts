@@ -25,6 +25,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import { spawn } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { appendFile, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -38,7 +39,23 @@ import { runDriver, runPythonSpec, type DriverEvent, type Frame, type RenderEngi
 const SKIP_DIRS = new Set([
   'node_modules', '.git', '.venv', 'venv', '__pycache__', 'site-packages',
   'dist', 'build', '.next', '.cache', '.mypy_cache', '.pytest_cache', 'media',
+  // Source checkouts of libraries (a Manim clone is the common one): its own
+  // `manim/scene/*.py` files define `class ZoomedScene(Scene)` and would
+  // otherwise be offered as "your scenes".
+  'manim-main', 'manim', 'example_scenes', 'examples', 'tests', 'test',
 ])
+
+/** Files that mark a directory as a package checkout rather than a scene folder. */
+const LIBRARY_MARKERS = ['pyproject.toml', 'setup.py', 'setup.cfg']
+
+/** Whether a directory is a library checkout (has packaging markers, is not the root). */
+async function isLibraryCheckout(dir: string, isRoot: boolean): Promise<boolean> {
+  if (isRoot) return false
+  for (const marker of LIBRARY_MARKERS) {
+    if (existsSync(join(dir, marker))) return true
+  }
+  return false
+}
 
 /** How deep the workspace scan goes looking for scene files. */
 const MAX_SCAN_DEPTH = 5
@@ -299,6 +316,8 @@ async function collectCandidates(root: string, dir: string, depth: number, out: 
     const absolute = join(dir, entry.name)
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name) || entry.name.startsWith('.')) continue
+      // A vendored clone (the Manim source, say) is not the user's scene tree.
+      if (await isLibraryCheckout(absolute, false)) continue
       await collectCandidates(root, absolute, depth + 1, out)
       continue
     }
