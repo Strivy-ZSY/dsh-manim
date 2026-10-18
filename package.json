@@ -1,6 +1,6 @@
 {
   "name": "dsh-manim",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "DSH 的 Manim 动画工作室：侧边栏「动画」行 + 右侧栏「动画工作室」tab，用论文/方法生成讲解视频。宿主半边管工作区门控、渲染引擎（自带的 Python venv 里跑 manim 0.22）、视频/分镜的 Range 流式回放，外加三个 agent 工具 manim_scene / manim_render / manim_frames。",
   "type": "module",
   "main": "./lib/index.js",

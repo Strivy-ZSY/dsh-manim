@@ -96,22 +96,52 @@ export async function verifyWorkspaceRoot(ctx: Context, root: string): Promise<G
  * @returns roots newest-first; an unreadable registry yields an empty list.
  */
 export function listWorkspaceRoots(ctx: Context): Array<{ path: string; name: string }> {
+  const roots: Array<{ path: string; name: string }> = []
+  for (const row of workspaceRows(ctx)) {
+    const path = [row.path, row.root, row.directory].find((value) => typeof value === 'string' && value !== '')
+    if (typeof path !== 'string') continue
+    // `Workspace` carries `title`; `name` and the basename are older/looser spellings.
+    const name = [row.title, row.name].find((value) => typeof value === 'string' && value !== '')
+    roots.push({ path, name: typeof name === 'string' ? name : basename(path) })
+  }
+  return roots
+}
+
+/** The registry's rows, or none when it is absent or unreadable. */
+function workspaceRows(ctx: Context): Array<Record<string, unknown>> {
   let rows: unknown
   try {
     rows = (ctx as unknown as { workspaceRegistry?: { list?: () => unknown } }).workspaceRegistry?.list?.()
   } catch {
     return []
   }
-  if (!Array.isArray(rows)) return []
-  const roots: Array<{ path: string; name: string }> = []
-  for (const row of rows) {
-    const record = row as Record<string, unknown>
-    const path = [record.path, record.root, record.directory].find((value) => typeof value === 'string' && value !== '')
-    if (typeof path !== 'string') continue
-    const name = typeof record.name === 'string' && record.name !== '' ? record.name : basename(path)
-    roots.push({ path, name })
+  return Array.isArray(rows) ? rows.filter((row): row is Record<string, unknown> => row !== null && typeof row === 'object') : []
+}
+
+/**
+ * The workspace root a session belongs to, by session id.
+ *
+ * A session *list* entry carries `cwd` only optionally — the list is built from
+ * persisted headers, and a row that has not been opened can legitimately omit it
+ * — so reading the cwd off the list is not a reliable way to answer "which
+ * workspace is this session in". The registry does answer it: each `Workspace`
+ * lists the header-validated `sessionIds` that live under its path.
+ *
+ * @param ctx - context carrying the workspace registry.
+ * @param sessionId - the session whose directory is wanted.
+ * @returns the root path, or `null` when no workspace claims that session.
+ */
+export function findWorkspaceRootForSession(ctx: Context, sessionId: string): string | null {
+  if (typeof sessionId !== 'string' || sessionId === '') return null
+  const direct = (ctx as unknown as { workspaceRegistry?: { sessionPath?: (id: string) => unknown } })
+    .workspaceRegistry?.sessionPath?.(sessionId)
+  if (typeof direct === 'string' && direct !== '') return direct
+  for (const row of workspaceRows(ctx)) {
+    const ids = row.sessionIds ?? row.sessions
+    const owns = Array.isArray(ids) && ids.some((id) => id === sessionId)
+    if (owns && typeof row.path === 'string' && row.path !== '') return row.path
   }
-  return roots
+  return null
 }
 
 /** Canonicalize a file and require it to be inside some registered workspace. */

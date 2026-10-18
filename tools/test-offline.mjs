@@ -241,6 +241,12 @@ check('POST /workspaces lists the registered roots',
   && rootsResponse.body.value.roots.some((entry) => entry.path !== ''),
   JSON.stringify(rootsResponse.body).slice(0, 160))
 
+const sessionRootResponse = await post('/dsh-manim/session-root', { sessionId: 'offline-session' })
+check('POST /session-root answers a path or null (never throws)',
+  sessionRootResponse.body.ok === true
+  && (sessionRootResponse.body.value?.path === null || typeof sessionRootResponse.body.value?.path === 'string'),
+  JSON.stringify(sessionRootResponse.body).slice(0, 160))
+
 const listResponse = await post('/dsh-manim/list', { root: workspace })
 check('POST /list answers the envelope', listResponse.body.ok === true, JSON.stringify(listResponse.body).slice(0, 200))
 check('POST /list returns the scanned scene', listResponse.body.value?.scenes?.some((entry) => entry.rel === 'animations/offline_demo.py') === true)

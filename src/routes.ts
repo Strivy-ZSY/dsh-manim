@@ -27,7 +27,7 @@ import { extname, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { QUALITIES, type Config } from './config.ts'
-import { isPathInside, listWorkspaceRoots, type ManimService } from './service.ts'
+import { findWorkspaceRootForSession, isPathInside, listWorkspaceRoots, type ManimService } from './service.ts'
 import type { RenderEngine, RenderJob } from './engine.ts'
 
 /** A JSON envelope the panel decodes. */
@@ -506,6 +506,12 @@ export function registerManimRoutes(
         } catch (error) {
           fail(res, 'failed', error instanceof Error ? error.message : String(error))
         }
+        return
+      }
+      case '/dsh-manim/session-root': {
+        const sessionId = (payload as { sessionId?: unknown }).sessionId
+        const path = typeof sessionId === 'string' ? findWorkspaceRootForSession(ctx, sessionId) : null
+        json(res, { ok: true, value: { path } })
         return
       }
       case '/dsh-manim/workspaces': {

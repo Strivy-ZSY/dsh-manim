@@ -19,6 +19,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { StudioApi, type StudioRemote } from './api.ts'
 import { registerManimStudio } from './panel-row.tsx'
+import { registerVideoPreview } from './video-preview.tsx'
 import { Studio, StudioView } from './studio.tsx'
 import { EN, ZH } from './locales.ts'
 
@@ -69,4 +70,7 @@ function makeApi(root: string): StudioRemote {
 export async function apply(ctx: ClientContext): Promise<void> {
   ctx.effect(() => ctx.locale.register(NS, { zh: ZH, en: EN }), 'dsh-manim: dictionaries')
   registerManimStudio(ctx, { makeApi, id: MANIM_ID, kind: MANIM_KIND, locale: NS })
+  // Rendered .mp4 files are ours, and the shell's own preview set has no video
+  // renderer: without this, clicking one opens an empty tab.
+  registerVideoPreview(ctx)
 }

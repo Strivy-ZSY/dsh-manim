@@ -7,6 +7,7 @@
 - 左侧栏「动画」入口 + 右侧栏「动画工作室」面板（场景列表 / 画质 / 渲染 / 播放 / 分镜 / 实时日志）
 - 四个 agent 工具：`manim_scene` · `manim_render` · `manim_frames` · `manim_voice`
 - 一份随包 skill `manim-explainer`：怎么把一篇论文拆成 4–8 拍、版式与节奏纪律、常见坑
+- 成片 `.mp4` 在右侧栏文件树里点开就能播（本插件注册了视频预览渲染器；官方自带的预览集不含视频）
 
 渲染器是 [Manim](https://www.manim.community/) 0.22，装在插件自己的虚拟环境里，不碰系统 Python。
 旁白用系统/在线 TTS，**不需要下载任何语音模型**。

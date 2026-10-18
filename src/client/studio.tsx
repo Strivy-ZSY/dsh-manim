@@ -157,14 +157,43 @@ function currentRoot(sessions: SessionListStore | undefined): string {
   return cwds.length === 1 ? cwds[0] : ''
 }
 
-/** Subscribe the workspace root to the session store ('' when none). */
-function useRoot(sessions: SessionListStore | undefined): string {
-  const [root, setRoot] = useState<string>(() => currentRoot(sessions))
+/**
+ * The selected session's id.
+ *
+ * Unlike `cwd`, this one is always on the list snapshot: the shaping code
+ * validates `current` against the rows, and a session that has never been opened
+ * still has an id. That makes it the reliable half of "which workspace am I in" —
+ * the host turns the id into a directory through the workspace registry.
+ */
+function currentSessionId(sessions: SessionListStore | undefined): string {
+  if (sessions === undefined || typeof sessions.getSnapshot !== 'function') return ''
+  let snapshot: unknown
+  try {
+    snapshot = sessions.getSnapshot()
+  } catch {
+    return ''
+  }
+  if (snapshot === null || typeof snapshot !== 'object') return ''
+  const view = snapshot as Record<string, unknown>
+  for (const key of ['current', 'currentId', 'selected', 'activeId'] as const) {
+    const value = view[key]
+    if (typeof value === 'string' && value !== '') return value
+    if (value !== null && typeof value === 'object') {
+      const nested = (value as Record<string, unknown>).id ?? (value as Record<string, unknown>).sessionId
+      if (typeof nested === 'string' && nested !== '') return nested
+    }
+  }
+  return ''
+}
+
+/** Subscribe both halves of the session identity ('' for either when unknown). */
+function useSession(sessions: SessionListStore | undefined): { root: string; id: string } {
+  const [state, setState] = useState(() => ({ root: currentRoot(sessions), id: currentSessionId(sessions) }))
   useEffect(() => {
     if (sessions === undefined || typeof sessions.subscribe !== 'function') return
-    return sessions.subscribe(() => setRoot(currentRoot(sessions)))
+    return sessions.subscribe(() => setState({ root: currentRoot(sessions), id: currentSessionId(sessions) }))
   }, [sessions])
-  return root
+  return state
 }
 
 /** One row of the scene list. */
@@ -570,7 +599,8 @@ export interface StudioProps {
  * @returns the panel element.
  */
 export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
-  const sessionRoot = useRoot(sessions)
+  const session = useSession(sessions)
+  const sessionRoot = session.root
   const [picked, setPicked] = useState<string>(chosenRoot)
   const [roots, setRoots] = useState<WorkspaceRoot[] | null>(null)
   const root = sessionRoot !== '' ? sessionRoot : picked
@@ -583,8 +613,25 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   useEffect(() => {
     if (sessionRoot !== '' || picked !== '') return
     let live = true
-    void makeApi('').workspaces()
-      .then((value) => {
+    const api = makeApi('')
+    void (async () => {
+      // Preferred: the host maps the session id to its workspace through the
+      // registry, so the panel opens the workspace the user is *in* rather than
+      // asking. The list entry's `cwd` is optional, which is why this exists.
+      if (session.id !== '') {
+        try {
+          const resolved = await api.sessionRoot(session.id)
+          if (live && typeof resolved.path === 'string' && resolved.path !== '') {
+            chosenRoot = resolved.path
+            setPicked(resolved.path)
+            return
+          }
+        } catch {
+          // Fall through to the list.
+        }
+      }
+      try {
+        const value = await api.workspaces()
         if (!live) return
         const list = value.roots ?? []
         setRoots(list)
@@ -592,10 +639,12 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
           chosenRoot = list[0].path
           setPicked(list[0].path)
         }
-      })
-      .catch(() => { if (live) setRoots([]) })
+      } catch {
+        if (live) setRoots([])
+      }
+    })()
     return () => { live = false }
-  }, [makeApi, sessionRoot, picked])
+  }, [makeApi, sessionRoot, picked, session.id])
   const memory = useMemo(() => memoryFor(root), [root])
 
   const [data, setData] = useState<ListResult | null>(null)
@@ -901,21 +950,22 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
     const candidates = roots ?? []
     if (candidates.length > 1) {
       return (
-        <div className={cx('notice')}>
-          <p>{t('panel.pickRoot')}</p>
+        <div className={cx('rootPicker')}>
+          <p className={cx('rootPickerTitle')}>{t('panel.pickRoot')}</p>
+          <p className={cx('rootPickerHint')}>{t('panel.pickRootHint')}</p>
           {candidates.map((candidate) => (
-            <p key={candidate.path}>
-              <button
-                type="button"
-                onClick={() => {
-                  chosenRoot = candidate.path
-                  setPicked(candidate.path)
-                }}
-              >
-                {candidate.name}
-              </button>
-              <span> {candidate.path}</span>
-            </p>
+            <button
+              key={candidate.path}
+              type="button"
+              className={cx('rootItem')}
+              onClick={() => {
+                chosenRoot = candidate.path
+                setPicked(candidate.path)
+              }}
+            >
+              <span className={cx('rootItemName')}>{candidate.name}</span>
+              <span className={cx('rootItemPath')}>{candidate.path}</span>
+            </button>
           ))}
         </div>
       )
