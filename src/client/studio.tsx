@@ -766,12 +766,10 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
    * into a phase and a percentage, and this loop paints it. The panel would
    * otherwise look frozen for ten minutes.
    */
-  const setupRuntime = useCallback(async (): Promise<void> => {
-    if (api === null || setupBusy) return
-    setSetupBusy(true)
-    setSetupProgress({ phase: t('runtime.phase.preparing'), percent: 0 })
+  /** Poll the host until the install settles; safe to call when one is already running. */
+  const watchSetup = useCallback(async (): Promise<void> => {
+    if (api === null) return
     try {
-      await api.setupRuntime()
       for (;;) {
         await new Promise((resolve) => setTimeout(resolve, 900))
         const status = await api.setupStatus()
@@ -788,7 +786,7 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
         setSetupProgress({ phase: status.phase ?? '', percent: 100 })
         if (status.state === 'done') {
           setRuntimeHint('')
-        } else {
+        } else if (status.state === 'failed') {
           setRuntimeHint(status.error !== undefined && status.error !== '' ? status.error : t('runtime.missing'))
         }
         break
@@ -799,7 +797,23 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
       setSetupBusy(false)
       setSetupProgress(null)
     }
-  }, [api, setupBusy])
+  }, [api])
+
+  /** Click handler: start the install, then follow it. */
+  const setupRuntime = useCallback(async (): Promise<void> => {
+    if (api === null || setupBusy) return
+    setSetupBusy(true)
+    setSetupProgress({ phase: t('runtime.phase.preparing'), percent: 0 })
+    try {
+      await api.setupRuntime()
+    } catch (failure) {
+      setRuntimeHint(failure instanceof Error ? failure.message : String(failure))
+      setSetupBusy(false)
+      setSetupProgress(null)
+      return
+    }
+    await watchSetup()
+  }, [api, setupBusy, watchSetup])
 
   // The renderer lives in a venv the plugin builds itself, and an installed copy
   // has none until `setup-runtime.mjs` runs. Saying so beats a bare
@@ -808,13 +822,22 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
     if (api === null) return
     let live = true
     void api.probe({})
-      .then((value) => {
+      .then(async (value) => {
         if (!live) return
         setRuntimeHint(value.pythonPresent === true ? '' : t('runtime.missing'))
+        if (value.pythonPresent !== true) {
+          // Reopening the panel during an install should show its progress, not a
+          // fresh "not installed" banner.
+          const status = await api.setupStatus().catch(() => null)
+          if (status?.state === 'running') {
+            setSetupBusy(true)
+            void watchSetup()
+          }
+        }
       })
       .catch(() => { if (live) setRuntimeHint('') })
     return () => { live = false }
-  }, [api])
+  }, [api, watchSetup])
 
   const load = useCallback(
     async (refresh = false) => {

@@ -36,7 +36,7 @@ export { resolveConfig, QUALITIES, DEFAULT_QUALITY, TOOL_IDS, qualityById, defau
 export type { Config, Quality, RawConfig, ToolId } from './config.ts'
 export { RenderEngine, runDriver, runPythonSpec, parseEvent } from './engine.ts'
 export type { DriverEvent, DriverSpec, Frame, JobProgress, JobState, RenderJob, RenderResult } from './engine.ts'
-export { ManimService, isPathInside, normalizeForPrefix, parseSetupProgress, safeClassName, safeName, scanScenes, sceneKey, findWorkspaceRootForSession, listWorkspaceRoots, verifyPathInSomeWorkspace, verifyWorkspaceRoot } from './service.ts'
+export { ManimService, setSetupChildFactory, isPathInside, normalizeForPrefix, parseSetupProgress, safeClassName, safeName, scanScenes, sceneKey, findWorkspaceRootForSession, listWorkspaceRoots, verifyPathInSomeWorkspace, verifyWorkspaceRoot } from './service.ts'
 export type { GateVerdict, PlanRecord, RenderRecord, SceneEntry, SetupStep } from './service.ts'
 export { registerManimRoutes } from './routes.ts'
 export { BUNDLED_SKILLS, parseSkillMarkdown, registerBundledSkills } from './skills.ts'

@@ -67,6 +67,23 @@ const MAX_SCAN_FILES = 600
 /** Cap on a file read while scanning (a 40 MB generated module is not a scene). */
 const MAX_SCAN_BYTES = 512 * 1024
 
+/** How the setup child is launched; a test replaces this with a stub. */
+export let spawnSetupChild: (script: string, venv: string) => SetupChild = (script, venv) =>
+  spawn(process.execPath, [script, '--venv', venv], { cwd: PLUGIN_ROOT, windowsHide: true })
+
+/** The part of a child process the setup job uses. */
+export interface SetupChild {
+  stdout?: { on: (event: 'data', listener: (chunk: unknown) => void) => unknown } | null
+  stderr?: { on: (event: 'data', listener: (chunk: unknown) => void) => unknown } | null
+  on: (event: 'close' | 'error', listener: (arg?: unknown) => void) => unknown
+  kill?: () => unknown
+}
+
+/** Replace the setup launcher (tests only). */
+export function setSetupChildFactory(factory: (script: string, venv: string) => SetupChild): void {
+  spawnSetupChild = factory
+}
+
 /** One step the pip output implies. */
 export interface SetupStep {
   kind: 'collecting' | 'installing' | 'installed'
@@ -1135,7 +1152,7 @@ export class ManimService {
       Object.assign(job, { running: false, phase: '失败', error: `missing ${script}`, percent: 100 })
       return { id: job.id }
     }
-    const child = spawn(process.execPath, [script, '--venv', venv], { cwd: PLUGIN_ROOT, windowsHide: true })
+    const child = spawnSetupChild(script, venv)
     const feed = (chunk: unknown): void => {
       const text = String(chunk)
       job.tail = (job.tail + text).slice(-2000)
@@ -1155,21 +1172,29 @@ export class ManimService {
     }
     child.stdout?.on('data', feed)
     child.stderr?.on('data', feed)
-    const timer = setTimeout(() => { try { child.kill() } catch { /* already gone */ } }, 40 * 60 * 1000)
-    await new Promise<void>((resolve) => {
-      child.on('close', () => { clearTimeout(timer); resolve() })
-      child.on('error', (error) => {
-        clearTimeout(timer)
-        job.error = error.message
-        resolve()
+    const timer = setTimeout(() => { try { child.kill?.() } catch { /* already gone */ } }, 40 * 60 * 1000)
+    // Return NOW. Awaiting the exit here made the HTTP call last as long as the
+    // install, and the panel only starts polling after this resolves — so the bar
+    // sat at 0% for ten minutes while pip was working perfectly.
+    void (async () => {
+      await new Promise<void>((resolve) => {
+        child.on('close', () => { clearTimeout(timer); resolve() })
+        child.on('error', (error) => {
+          clearTimeout(timer)
+          job.error = error instanceof Error ? error.message : String(error ?? 'spawn failed')
+          resolve()
+        })
       })
-    })
-    const probe = await this.probe(true)
-    job.running = false
-    job.percent = 100
-    job.ok = probe.pythonPresent === true
-    job.phase = job.ok ? '完成' : '失败'
-    if (!job.ok && job.error === '') job.error = String(probe.error ?? '运行时装不上')
+      const probe = await this.probe(true).catch((error: unknown) => ({ pythonPresent: false, error: String(error) }))
+      const present = (probe as { pythonPresent?: unknown }).pythonPresent === true
+      job.running = false
+      job.percent = 100
+      job.ok = present
+      job.phase = present ? '完成' : '失败'
+      if (!present && job.error === '') {
+        job.error = String((probe as { error?: unknown }).error ?? '运行时装不上')
+      }
+    })()
     return { id: job.id }
   }
 

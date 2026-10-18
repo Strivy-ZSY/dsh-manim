@@ -291,6 +291,42 @@ const setupSource = readFileSync(path.join(root, 'runtime', 'setup-runtime.mjs')
 check('setup-runtime actually emits stage markers',
   (setupSource.match(/stage\(\d+,/g) ?? []).length >= 5)
 
+// The install must be a job: start returns at once, the panel polls. Waiting for
+// pip inside the request is what kept the bar at 0% for the whole install.
+const { EventEmitter } = await import('node:events')
+mod.setSetupChildFactory(() => {
+  const child = new EventEmitter()
+  child.stdout = new EventEmitter()
+  child.stderr = new EventEmitter()
+  child.kill = () => {}
+  setTimeout(() => {
+    child.stdout.emit('data', '##dsh-manim-progress 20 下载依赖' + String.fromCharCode(10))
+    child.stdout.emit('data', 'Collecting manim==0.22.0' + String.fromCharCode(10) + 'Collecting numpy' + String.fromCharCode(10))
+    child.stdout.emit('data', '##dsh-manim-progress 100 完成' + String.fromCharCode(10))
+    child.emit('close', 0)
+  }, 30)
+  return child
+})
+const startedAt = Date.now()
+const setupStart = await post('/dsh-manim/runtime/setup', {})
+const startMs = Date.now() - startedAt
+check('POST /runtime/setup returns immediately',
+  setupStart.body.ok === true && typeof setupStart.body.value?.id === 'string' && startMs < 1000,
+  `${String(startMs)}ms`)
+
+const midway = await post('/dsh-manim/runtime/setup-status', {})
+check('the job reports a phase while running',
+  ['running', 'done', 'failed'].includes(midway.body.value?.state)
+  && (midway.body.value?.percent ?? 0) >= 0,
+  JSON.stringify(midway.body.value).slice(0, 160))
+
+await new Promise((resolve) => setTimeout(resolve, 120))
+const settledStatus = await post('/dsh-manim/runtime/setup-status', {})
+check('the job settles after the child exits',
+  ['done', 'failed'].includes(settledStatus.body.value?.state)
+  && settledStatus.body.value?.percent === 100,
+  JSON.stringify(settledStatus.body.value).slice(0, 160))
+
 const listResponse = await post('/dsh-manim/list', { root: workspace })
 check('POST /list answers the envelope', listResponse.body.ok === true, JSON.stringify(listResponse.body).slice(0, 200))
 check('POST /list returns the scanned scene', listResponse.body.value?.scenes?.some((entry) => entry.rel === 'animations/offline_demo.py') === true)
