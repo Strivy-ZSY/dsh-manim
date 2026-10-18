@@ -70,6 +70,44 @@ node runtime/setup-runtime.mjs --check          # 只检查，不安装
 node runtime/setup-runtime.mjs --python <exe>   # 指定基础解释器
 ```
 
+### 网络不稳时怎么装（`ERR_PNPM_GIT_FETCH_FAILED` / `SSL_ERROR_SYSCALL` / `early EOF`）
+
+这些是 **GitHub 传输链路**的报错，不是仓库坏了。按顺序试，通常第 1 条就够：
+
+**1. 让 git 容忍慢链路**
+
+```bash
+git config --global http.version HTTP/1.1
+git config --global http.postBuffer 524288000
+git config --global http.lowSpeedLimit 0
+git config --global http.lowSpeedTime 999999
+# 再重跑 pnpm add
+```
+
+后两条是关键：`early EOF` / `SSL_ERROR_SYSCALL` 多半是链路被限速后 git 自己判超时。
+
+**2. 给 pnpm 更多耐心**
+
+```bash
+pnpm add https://github.com/Strivy-ZSY/dsh-manim --fetch-retries=5 --fetch-timeout=600000
+```
+
+**3. 走镜像**（把 `github.com` 换成镜像主机，任选其一）
+
+```bash
+pnpm add https://ghfast.top/https://github.com/Strivy-ZSY/dsh-manim.git
+pnpm add https://gitclone.com/github.com/Strivy-ZSY/dsh-manim.git
+```
+
+**4. 用压缩包代替 git 协议**（少一次协议握手，通常最稳）
+
+```bash
+pnpm add https://ghfast.top/https://github.com/Strivy-ZSY/dsh-manim/archive/refs/heads/main.tar.gz
+```
+
+> 仓库里带了一段 7.6 MB 的演示视频（`docs/demo-sample.mp4`，只用于 README 展示，安装不需要它），
+> 所以 clone 的体积比代码本身大。链路很窄时，第 4 条最省事。
+
 ### 面板从哪里打开
 
 插件**不在左侧栏加自己的一行**：官方客户端的左栏是它自己的（插件 / 自动化任务 / …），
