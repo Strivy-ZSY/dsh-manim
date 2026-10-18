@@ -153,6 +153,54 @@ for (const [label, services] of [
 }
 
 // ---------------------------------------------------------------------------
+console.log('[3] panel renders when the shell ships none of the icon names')
+
+const ReactForRender = require('react')
+const { renderToStaticMarkup } = require('react-dom/server')
+
+/** Load the bundle again with a primitives table that has no icons at all. */
+function loadWithPrimitives(table) {
+  const box = { ...sandbox }
+  box.window = { __ModuleLoader__: { load: (definition) => { box.__loaded = definition } } }
+  vm.createContext(box)
+  vm.runInContext(readFileSync(join(root, 'lib', 'client.js'), 'utf8'), box)
+  return box.__loaded.factory((name) => {
+    if (name === 'react') return ReactForRender
+    if (name === 'react/jsx-runtime') return require('react/jsx-runtime')
+    if (name === '@deepseek-ai/dsh-client-ui-primitives') return table
+    return new Proxy({}, { get: () => () => ({}) })
+  })
+}
+
+const ButtonLike = (props) => ReactForRender.createElement('button', { 'data-stub': 'button' }, props.icon ?? null, props.children ?? null)
+const MenuLike = (props) => ReactForRender.createElement('span', { 'data-stub': 'menu' }, props.anchor ?? null)
+
+const viewProps = {
+  data: null, selected: '', sceneClass: null, quality: null, job: null, frames: [],
+  error: null, busy: false, showLog: false,
+  onSelect: () => {}, onSceneClass: () => {}, onQuality: () => {}, onRender: () => {},
+  onCancel: () => {}, onRefresh: () => {}, onStoryboard: () => {}, onNewScene: () => {},
+  onToggleLog: () => {}, frameUrl: () => '', videoUrl: () => '', onSeek: () => {},
+  videoRef: { current: null },
+}
+
+for (const [label, table] of [
+  ['official naming, no size-suffixed icons', { Button: ButtonLike, Menu: MenuLike, IconPlayOutlineRegular: () => ReactForRender.createElement('svg', { 'data-stub': 'icon' }) }],
+  ['no icons and no Button/Menu at all', {}],
+]) {
+  let error = null
+  let html = ''
+  try {
+    const client2 = loadWithPrimitives(table)
+    html = renderToStaticMarkup(ReactForRender.createElement(client2.StudioView, viewProps))
+  } catch (caught) {
+    error = caught
+  }
+  check('view renders: ' + label, error === null, error === null ? '' : String(error.message ?? error).slice(0, 160))
+  check('view is not empty: ' + label, html.replace(/<[^>]*>/g, '').trim().length > 0)
+}
+
+// ---------------------------------------------------------------------------
 check('video preview registers through the optional dependency', registeredPreview?.id === 'dsh-manim-video', JSON.stringify(registeredPreview?.extensions ?? null))
 
 console.log(`\n${passed} passed, ${failures.length} failed`)

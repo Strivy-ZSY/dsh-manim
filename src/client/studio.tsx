@@ -32,17 +32,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX, RefObject } from 'react'
 import {
-  Button,
-  IconChevronDownOutline14,
-  IconDownloadOutline16,
-  IconFolderOpenOutline16,
-  IconLoadingOutline16,
-  IconPlayOutline16,
-  IconPlusOutline16,
-  IconRefreshOutline16,
-  IconStopFill16,
-  Menu,
-} from '@deepseek-ai/dsh-client-ui-primitives'
+  ShellButton as Button,
+  ShellMenu as Menu,
+  IconChevronDown,
+  IconDownload,
+  IconFolderOpen,
+  IconLoading,
+  IconPlay,
+  IconPlus,
+  IconRefresh,
+  IconStop,
+} from './icons.tsx'
 import type { Frame } from '../engine.ts'
 import type { RenderRecord, SceneEntry } from '../service.ts'
 import { ManimApiError, type JobView, type ListResult, type QualityOption, type StudioRemote, type WorkspaceRoot } from './api.ts'
@@ -340,7 +340,7 @@ export function StudioView(props: StudioViewProps): JSX.Element {
             <Button
               size="sm"
               variant="ghost"
-              icon={<IconFolderOpenOutline16 />}
+              icon={<IconFolderOpen />}
               title={t('files.tip')}
               disabled={renders.length === 0}
               onClick={() => setFileOpen((open) => !open)}
@@ -381,7 +381,7 @@ export function StudioView(props: StudioViewProps): JSX.Element {
             <Button
               size="sm"
               variant="ghost"
-              icon={<IconChevronDownOutline14 />}
+              icon={<IconChevronDown />}
               title={t('quality.draftHint')}
               disabled={qualities.length === 0}
               onClick={() => setQualityOpen((open) => !open)}
@@ -403,14 +403,14 @@ export function StudioView(props: StudioViewProps): JSX.Element {
         <Button
           size="sm"
           variant="primary"
-          icon={running ? <IconLoadingOutline16 /> : <IconPlayOutline16 />}
+          icon={running ? <IconLoading /> : <IconPlay />}
           onClick={onRender}
           disabled={busy || running || entry === null || sceneClass === null}
         >
           {running ? t('render.running') : t('render.start')}
         </Button>
         {running ? (
-          <Button size="sm" variant="ghost" icon={<IconStopFill16 />} onClick={onCancel}>
+          <Button size="sm" variant="ghost" icon={<IconStop />} onClick={onCancel}>
             {t('render.cancel')}
           </Button>
         ) : null}
@@ -418,7 +418,7 @@ export function StudioView(props: StudioViewProps): JSX.Element {
           size="sm"
           variant="ghost"
           className={cx('iconOnly')}
-          icon={<IconRefreshOutline16 />}
+          icon={<IconRefresh />}
           onClick={onRefresh}
           title={t('panel.refresh')}
           aria-label={t('panel.refresh')}
@@ -488,7 +488,7 @@ export function StudioView(props: StudioViewProps): JSX.Element {
               <Button
                 size="sm"
                 variant="ghost"
-                icon={<IconDownloadOutline16 />}
+                icon={<IconDownload />}
                 onClick={onStoryboard}
                 disabled={busy || entry === null}
               >
@@ -522,7 +522,7 @@ export function StudioView(props: StudioViewProps): JSX.Element {
         <div className={cx('sectionHead')}>
           <span className={cx('sectionTitle')}>{t('scene.title')}</span>
           <span className={cx('muted')}>{t('scene.count', { count: data?.scenes.length ?? 0 })}</span>
-          <Button size="sm" variant="ghost" icon={<IconPlusOutline16 />} onClick={onNewScene} disabled={busy}>
+          <Button size="sm" variant="ghost" icon={<IconPlus />} onClick={onNewScene} disabled={busy}>
             {busy ? t('scene.creating') : t('scene.new')}
           </Button>
         </div>

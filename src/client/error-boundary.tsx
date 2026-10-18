@@ -14,6 +14,7 @@
 import { Component, useEffect } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import styles from './studio.module.css'
+import { MISSING_ICONS } from './icons.tsx'
 
 /** Props of {@link PanelBoundary}. */
 export interface PanelBoundaryProps {
@@ -85,6 +86,10 @@ export class PanelBoundary extends Component<PanelBoundaryProps, PanelBoundarySt
  */
 export function useMountReport(where: string): void {
   useEffect(() => {
-    report(where, 'panel body mounted', '')
+    // Which shell icon names this build had to substitute belongs in the log too:
+    // a substituted icon is harmless, but the *list* is the fastest proof of which
+    // primitives build the shell actually ships.
+    const substituted = MISSING_ICONS.length === 0 ? '' : `substituted icons: ${MISSING_ICONS.join(', ')}`
+    report(where, substituted === '' ? 'panel body mounted' : `panel body mounted; ${substituted}`, '')
   }, [where])
 }
