@@ -1,0 +1,541 @@
+/*
+ * 动画工作室 styles.
+ *
+ * Every colour comes from the shell's own alias tokens (`--dsw-alias-*`) rather
+ * than a literal: the panel sits inside the shell's frame, and a hard-coded
+ * background is the one surface that does not follow a theme switch. The
+ * fallbacks after each comma are for the standalone harness
+ * (`tools/check-panel-markup.mjs`) where the tokens do not exist.
+ *
+ * `.railMark` / `.studioMark` belong to panel-icon.tsx: the rail dialect must be
+ * `flex: none` so a long label does not squash the glyph — the bug the memory
+ * panel hit ("我的图标比邻居小") — and the colour dialect forces the family tint.
+ */
+
+.railMark {
+  color: var(--dsh-file-type-icon-color, currentColor);
+  flex: none;
+}
+
+/*
+ * The right sidebar's dialect. The *colour* is set by the `StudioMark` wrapper
+ * rather than here, because it must override the file-type family's default for
+ * an unknown category. The fallback chain is dropped on purpose: this mark is
+ * violet by design.
+ */
+.studioMark {
+  color: var(--dsw-static-violet-500, #8b5cf6);
+  flex: none;
+}
+
+/* The chip's mark must not shrink; same rule as the built-in 文件 tab's. */
+.titleIcon {
+  flex: none;
+}
+
+.studio {
+  /* The pane's padding, named because the sticky toolbar has to bleed across it
+   * (see `.toolbar`). One number, so the two cannot drift apart. */
+  --pane-pad: 10px;
+  /*
+   * How tall the player may get. The point is that the controls must stay on
+   * screen: a pane that is very wide (full-screen on a 2560px display) would
+   * otherwise size the video to the panel's width, and 16:9 of 2552px is 1436px
+   * of picture — taller than the pane, so the scrub bar and the play button end
+   * up below the fold. Measured in a real page: a synthetic 2560×1400 pane put
+   * the video 259px past the bottom edge.
+   *
+   * `100vh - 150px` is the pane minus the tab strip, the toolbar, the gaps and
+   * the padding, with a little left over so the next section peeks — that
+   * sliver is what tells the reader there is something below.
+   */
+  --player-max-h: max(180px, calc(100vh - 150px));
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  padding: var(--pane-pad) var(--pane-pad) 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--dsw-alias-bg-base, #ffffff);
+  color: var(--dsw-alias-label-primary, #1f2937);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.notice {
+  padding: 18px 14px;
+  color: var(--dsw-alias-label-caption, #6b7280);
+  text-align: center;
+}
+
+.muted {
+  color: var(--dsw-alias-label-caption, #6b7280);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error {
+  padding: 7px 9px;
+  border: 1px solid var(--dsw-alias-border-l4, #e5e7eb);
+  border-left: 3px solid #ef5f6b;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1, #f9fafb);
+  color: var(--dsw-alias-label-primary, #1f2937);
+  word-break: break-word;
+}
+
+/* --- toolbar -------------------------------------------------------------- */
+
+/*
+ * The controls themselves are shell primitives (`Button`, `Menu`), so this file
+ * only owns their *arrangement*. That is the point: a hand-rolled capsule sat
+ * next to the shell's own and looked almost-right, which reads worse than
+ * plainly different — the geometry (h28/r14, gap 4), the hover wash, the focus
+ * ring and the disabled opacity all come from the design system now.
+ *
+ * Sticky, because a full-screen window gives the video the whole width and the
+ * pane scrolls: without this, reading the log means losing the render button.
+ */
+.toolbar {
+  position: sticky;
+  /*
+   * Pinned flush against the pane's top edge — and the offset is negative
+   * because a sticky element resolves `top` against the scrollport's *content*
+   * box, which starts one `--pane-pad` down. Measured in a real page: with
+   * `top: 0` the bar came to rest 10 px below the pane's top, and the scrolled
+   * content showed through that gap as a stray dark strip.
+   */
+  top: calc(-1 * var(--pane-pad));
+  z-index: 1;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: none;
+  /*
+   * Bleed across the pane's padding, then put the content back where it was. A
+   * background that stops at the padding edge leaves gutters either side, which
+   * is the other half of the same "narrow strip" complaint.
+   *
+   * The top padding is deliberately smaller than `--pane-pad`: a sticky bar is
+   * read as chrome rather than as content, and the controls sit better closer to
+   * the edge than the sections below them do.
+   */
+  margin: calc(-1 * var(--pane-pad)) calc(-1 * var(--pane-pad)) 0;
+  padding: 5px var(--pane-pad) 8px;
+  background: var(--dsw-alias-bg-base, #ffffff);
+  /* A hairline, so the bar reads as a header when content passes under it. */
+  box-shadow: 0 1px 0 var(--dsw-alias-border-l4, #e5e7eb);
+}
+
+/*
+ * The two dropdowns.
+ *
+ * `flex: none` is the real rule: the Menu primitive wraps its trigger in its own
+ * span, and without this the span is a shrinkable flex item — a tight toolbar
+ * would squash the buttons instead of wrapping the row.
+ *
+ * The names also matter to `tools/check-panel-markup.mjs`, which has to tell the
+ * two dropdowns apart: both go through the same `Menu`, so the captured `items`
+ * lists are otherwise indistinguishable and an assertion can pass by reading the
+ * wrong one.
+ */
+.fileMenu,
+.qualityMenu {
+  flex: none;
+}
+
+/* The icon-only form: the shell's own 28×28 icon container, not a capsule. */
+.iconOnly {
+  padding: 0;
+  width: 28px;
+}
+
+/* --- stage: picture and storyboard ---------------------------------------- */
+
+/*
+ * Stacked by default; side by side **only in full screen**.
+ *
+ * The default matters more than the exception: a docked sidebar is ~419px, and
+ * putting the storyboard beside the picture there would take the width out of
+ * the video — which is the thing being watched. Full screen is where the width
+ * is spare, and that is the only place the two columns earn their keep.
+ *
+ * The trigger is the shell's own state, not a width guess: the right-sidebar
+ * panel carries `data-sidebar-right-panel` = `push` when docked and
+ * `fullscreen` when expanded. A width threshold would fire on a merely *wide*
+ * docked sidebar — exactly the case the user asked to leave alone — and the
+ * sidebar's width is independent of the viewport, so no media query can see it.
+ * (This is the same shape as the composer's `[data-dsh-composer-tight]` rule:
+ * the shell's attribute is the *condition*, the subject is our own element.)
+ */
+.stage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  flex: none;
+  min-width: 0;
+}
+
+[data-sidebar-right-panel='fullscreen'] .stage {
+  flex-wrap: nowrap;
+}
+
+.stageMain {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Three shares of the slack to the picture, one to the storyboard. */
+  flex: 3 1 520px;
+  min-width: 0;
+}
+
+.stageSide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+/* In the side column the storyboard must not pretend to be a full-width
+   section — no hairline, no top padding. */
+.sectionFlat {
+  padding-top: 0;
+  border-top: none;
+}
+
+/* --- player --------------------------------------------------------------- */
+
+/*
+ * The player hugs its video. The previous version pinned the element to the
+ * panel width and capped its *height*, which letterboxed the picture inside a
+ * full-width black box — in a full-screen window the video occupied about half
+ * the width, flanked by two black slabs. Sizing the element to the content
+ * removes the slabs and gives the width back to the picture.
+ */
+.player {
+  display: flex;
+  /* Left, not centred: the picture lines up with everything else in the pane,
+     and "the empty space goes to the right" is what leaves room for the
+     storyboard column beside it. */
+  justify-content: flex-start;
+  flex: none;
+  min-height: 0;
+}
+
+.video {
+  display: block;
+  /*
+   * `max-width`/`max-height`, **not** `width: 100%`.
+   *
+   * Forcing the width makes the element box the panel's width and then fights
+   * the height, and the two failure modes are both visible: with a `max-height`
+   * the picture is letterboxed inside a wider box (black slabs either side —
+   * the first complaint), and without one the box grows past the pane and the
+   * controls fall off the bottom (the second one). Clamping both maxima instead
+   * lets the browser keep the aspect ratio while shrinking the element itself,
+   * which is the whole behaviour wanted here.
+   *
+   * `width: auto` also means the video never upscales past its own resolution:
+   * a 480p draft stays 854px wide in a wide pane instead of being stretched
+   * blurry to fill it.
+   */
+  max-width: 100%;
+  max-height: var(--player-max-h);
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  background: #000000;
+}
+
+.playerEmpty {
+  width: 100%;
+  padding: 26px 12px;
+  border: 1px solid var(--dsw-alias-border-l4, #e5e7eb);
+  border-radius: 8px;
+  color: var(--dsw-alias-label-caption, #9ca3af);
+  text-align: center;
+  background: var(--dsw-alias-bg-layer-1, #f9fafb);
+}
+
+/* --- status --------------------------------------------------------------- */
+
+.status {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: none;
+}
+
+.statusLine {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.stateOk {
+  font-weight: 600;
+}
+
+.stateBad {
+  font-weight: 600;
+  color: #ef5f6b;
+}
+
+.bar {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--dsw-alias-bg-layer-1, #eef1f5);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: #4d9cff;
+  transition: width 0.25s ease-out;
+}
+
+/* No percentage yet (before the plan pass answers): a moving band beats a bar
+ * frozen at 0%, which reads as "stuck". */
+.barIndeterminate {
+  width: 35%;
+  animation: manimSweep 1.1s ease-in-out infinite;
+}
+
+@keyframes manimSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(320%); }
+}
+
+/* --- sections ------------------------------------------------------------- */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+  padding-top: 8px;
+  border-top: 1px solid var(--dsw-alias-border-l4, #eef1f5);
+}
+
+.sectionHead {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sectionTitle {
+  font-weight: 600;
+  flex: none;
+}
+
+/* --- storyboard ----------------------------------------------------------- */
+
+/*
+ * Docked (the default): one scrolling row. A ~419px pane has no room for
+ * anything else, and the strip is read as "one line of the film".
+ */
+.board {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+/*
+ * Full screen: two columns, filling the height of the picture beside them.
+ *
+ * Measured in a real page before this: the column beside the picture was ~750px
+ * wide and ~900px tall, and the one scrolling row of 104px frames put ~110px of
+ * pictures at the top of it with ~700px of nothing underneath — while 2 of the 6
+ * frames sat off the right edge, behind a horizontal scrollbar. Six frames two
+ * by three fill the column instead: every frame visible at once, each several
+ * times the area it had, and the storyboard ends where the video ends.
+ *
+ * The height comes from the picture: `.stage` stretches its items, the section
+ * grows to fill the column, and the rows share what is left. The 80px floor only
+ * matters in a pane too short for three rows — there it scrolls rather than
+ * shrinking the frames to slivers. (`flex: 1 1 auto` is *not* set on
+ * `.stageSide` itself: its 320px basis is what splits the stage 3:1 with the
+ * picture, and an `auto` basis would quietly hand it less width.)
+ */
+[data-sidebar-right-panel='fullscreen'] .stage {
+  align-items: stretch;
+}
+
+[data-sidebar-right-panel='fullscreen'] .stageSide {
+  min-height: 0;
+}
+
+[data-sidebar-right-panel='fullscreen'] .stageSide > .sectionFlat {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+[data-sidebar-right-panel='fullscreen'] .board {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: minmax(80px, 1fr);
+  gap: 6px;
+  overflow: auto;
+  padding-bottom: 0;
+}
+
+[data-sidebar-right-panel='fullscreen'] .boardCell {
+  height: 100%;
+}
+
+/*
+ * The cell's shape is the grid's business; the picture is fitted inside it, so a
+ * cell taller than 16:9 mats evenly above and below rather than stretching the
+ * frame. The matting is the cell's own black, the same colour the frames sit on.
+ */
+[data-sidebar-right-panel='fullscreen'] .boardImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.boardCell {
+  position: relative;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l4, #e5e7eb);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #000000;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.boardCell:hover {
+  border-color: #4d9cff;
+}
+
+.boardImg {
+  display: block;
+  width: 104px;
+  height: auto;
+}
+
+.boardTime {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgb(0 0 0 / 62%);
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 15px;
+}
+
+/* --- scene list ----------------------------------------------------------- */
+
+.scenes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 34vh;
+  overflow-y: auto;
+}
+
+.sceneRow {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sceneRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover, #f3f4f6);
+}
+
+.sceneRowActive {
+  border-color: #4d9cff;
+  background: var(--dsw-alias-bg-layer-1, #f9fafb);
+}
+
+.sceneName {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sceneMeta {
+  font-size: 11px;
+  color: var(--dsw-alias-label-caption, #6b7280);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sceneDot {
+  margin: 0 4px;
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 2px 9px;
+  border: 1px solid var(--dsw-alias-border-l4, #e5e7eb);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #4b5563);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.chipActive {
+  border-color: #4d9cff;
+  color: #4d9cff;
+}
+
+/* --- log ------------------------------------------------------------------ */
+
+.log {
+  max-height: 30vh;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--dsw-alias-border-l4, #e5e7eb);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1, #f9fafb);
+  color: var(--dsw-alias-label-secondary, #4b5563);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

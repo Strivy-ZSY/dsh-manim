@@ -1,0 +1,15 @@
+node_modules/
+cache/
+media/
+evidence/
+store/
+out/
+venv/
+.venv/
+__pycache__/
+*.log
+*.bak
+*.bak-*
+PATCH-NOTES-*.md
+.DS_Store
+Thumbs.db
