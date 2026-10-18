@@ -149,9 +149,12 @@ export function findWorkspaceRootForSession(ctx: Context, sessionId: string, cwd
   const direct = (ctx as unknown as { workspaceRegistry?: { sessionPath?: (id: string) => unknown } })
     .workspaceRegistry?.sessionPath?.(sessionId)
   if (typeof direct === 'string' && direct !== '') return direct
+  // `session-<uuid>` on disk, a bare uuid at runtime: compare without the prefix.
+  const wanted = sessionId.replace(/^session-/, '').toLowerCase()
   for (const row of workspaceRows(ctx)) {
     const ids = row.sessionIds ?? row.sessions
-    const owns = Array.isArray(ids) && ids.some((id) => id === sessionId)
+    const owns = Array.isArray(ids) && ids.some((id) => typeof id === 'string'
+      && id.replace(/^session-/, '').toLowerCase() === wanted)
     if (owns && typeof row.path === 'string' && row.path !== '') return row.path
   }
   return null

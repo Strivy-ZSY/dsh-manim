@@ -45,7 +45,7 @@ import {
 } from './icons.tsx'
 import type { Frame } from '../engine.ts'
 import type { RenderRecord, SceneEntry } from '../service.ts'
-import { detectedWorkspaceRoot, subscribeWorkspaceRoot } from './workspace-root.ts'
+import { detectedWorkspaceRoot, rememberedPick, rememberPick, subscribeWorkspaceRoot } from './workspace-root.ts'
 import { ManimApiError, type JobView, type ListResult, type QualityOption, type StudioRemote, type WorkspaceRoot } from './api.ts'
 import { formatDuration, t } from './i18n.ts'
 import styles from './studio.module.css'
@@ -678,6 +678,12 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
       // registry, so the panel opens the workspace the user is *in* rather than
       // asking. The list entry's `cwd` is optional, which is why this exists.
       if (session.id !== '') {
+        const remembered = rememberedPick(session.id)
+        if (remembered !== '') {
+          chosenRoot = remembered
+          setPicked(remembered)
+          return
+        }
         try {
           const resolved = await api.sessionRoot(session.id, session.root)
           if (live && typeof resolved.path === 'string' && resolved.path !== '') {
@@ -1058,6 +1064,7 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
               className={cx('rootItem')}
               onClick={() => {
                 chosenRoot = candidate.path
+                rememberPick(session.id, candidate.path)
                 setPicked(candidate.path)
               }}
             >

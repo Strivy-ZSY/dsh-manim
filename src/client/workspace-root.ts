@@ -23,6 +23,34 @@ let detected = ''
 /** Subscribers that re-render when the derivation changes. */
 const listeners = new Set<() => void>()
 
+/** localStorage key for a per-session manual pick. */
+const PICK_KEY = 'dsh-manim.workspace'
+
+/** A manual pick for this session, '' when the user never picked. */
+export function rememberedPick(sessionId: string): string {
+  try {
+    const raw = window.localStorage.getItem(PICK_KEY)
+    if (raw === null || sessionId === '') return ''
+    const table = JSON.parse(raw) as Record<string, unknown>
+    return text(table[sessionId])
+  } catch {
+    return ''
+  }
+}
+
+/** Remember a manual pick for this session. */
+export function rememberPick(sessionId: string, path: string): void {
+  if (sessionId === '') return
+  try {
+    const raw = window.localStorage.getItem(PICK_KEY)
+    const table = (raw === null ? {} : JSON.parse(raw)) as Record<string, unknown>
+    table[sessionId] = path
+    window.localStorage.setItem(PICK_KEY, JSON.stringify(table))
+  } catch {
+    // A shell without storage simply asks again.
+  }
+}
+
 /** The shell-derived root, '' when there is none. */
 export function detectedWorkspaceRoot(): string {
   return detected
@@ -52,6 +80,8 @@ interface WorkspaceRow {
   path?: unknown
   title?: unknown
   sessionIds?: unknown
+  updatedAt?: unknown
+  createdAt?: unknown
 }
 
 /** The slice of the sessions list store this module reads. */
@@ -71,6 +101,19 @@ interface WorkspacesService {
 /** Strings only. */
 function text(value: unknown): string {
   return typeof value === 'string' ? value : ''
+}
+
+/**
+ * Session ids compared without their `session-` prefix.
+ *
+ * The registry persists `session-<uuid>`; a runtime may hand out the bare uuid
+ * (or vice versa). Comparing the spellings literally is what made the panel
+ * report "no workspace" over a workspace that lists the very session on screen.
+ */
+function sameSession(a: unknown, b: unknown): boolean {
+  const norm = (value: unknown): string => text(value).replace(/^session-/, '').toLowerCase()
+  const left = norm(a)
+  return left !== '' && left === norm(b)
 }
 
 /** The session id currently on screen. */
@@ -93,6 +136,37 @@ function sessionCwd(sessions: SessionsStore | undefined, id: string): string {
   }
 }
 
+/** Reported at most once per page lifetime, so the log stays readable. */
+let diagnosed = false
+
+/**
+ * Write down why the derivation failed.
+ *
+ * Without this the panel can only say "pick one", and the reason (no session id?
+ * rows without sessionIds? ids that do not compare equal?) stays invisible —
+ * which cost several round trips already. Counts and id *shapes* only: no paths
+ * beyond the workspace rows the panel is about to show anyway.
+ */
+function diagnose(sessionId: string, rows: WorkspaceRow[]): void {
+  if (diagnosed) return
+  diagnosed = true
+  const detail = {
+    sessionId,
+    rows: rows.length,
+    sessionIdsPerRow: rows.map((row) => (Array.isArray(row.sessionIds) ? row.sessionIds.length : -1)),
+    sampleRowIds: rows.map((row) => (Array.isArray(row.sessionIds) ? row.sessionIds.slice(0, 2).map(String) : [])),
+  }
+  try {
+    void fetch('/dsh-manim/client-log', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ where: 'workspace-detect', message: JSON.stringify(detail), stack: '' }),
+    }).catch(() => {})
+  } catch {
+    // Diagnostics must never break the panel.
+  }
+}
+
 /** Pick the workspace the given session belongs to. */
 function derive(workspaces: WorkspacesService | undefined, sessions: SessionsStore | undefined): string {
   let rows: WorkspaceRow[] = []
@@ -106,10 +180,12 @@ function derive(workspaces: WorkspacesService | undefined, sessions: SessionsSto
 
   const id = currentSessionId(sessions)
   if (id !== '') {
-    const owner = rows.find((row) => Array.isArray(row.sessionIds) && row.sessionIds.includes(id))
+    const owner = rows.find((row) => Array.isArray(row.sessionIds)
+      && row.sessionIds.some((candidate) => sameSession(candidate, id)))
     const path = text(owner?.path)
     if (path !== '') return path
   }
+  diagnose(id, rows)
 
   // No session match: a directory the session records is still authoritative.
   const cwd = sessionCwd(sessions, id).replaceAll(String.fromCharCode(92), '/').replace(/\/+$/, '')
@@ -124,7 +200,16 @@ function derive(workspaces: WorkspacesService | undefined, sessions: SessionsSto
 
   // One workspace is unambiguous.
   if (rows.length === 1) return text(rows[0]?.path)
-  return ''
+
+  // Still nothing: fall back to the most recently touched workspace. This is a
+  // heuristic, not a fact — it is here because "the workspace I was just working
+  // in" beats a picker in the overwhelming majority of cases, and the panel's
+  // manual choice still overrides it.
+  const freshest = [...rows]
+    .map((row) => ({ row, at: Date.parse(text(row.updatedAt) || text(row.createdAt)) }))
+    .filter((entry) => Number.isFinite(entry.at))
+    .sort((a, b) => b.at - a.at)[0]
+  return text(freshest?.row.path)
 }
 
 /**
