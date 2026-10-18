@@ -75,7 +75,7 @@ export let spawnSetupChild: (script: string, venv: string) => SetupChild = (scri
 export interface SetupChild {
   stdout?: { on: (event: 'data', listener: (chunk: unknown) => void) => unknown } | null
   stderr?: { on: (event: 'data', listener: (chunk: unknown) => void) => unknown } | null
-  on: (event: 'close' | 'error', listener: (arg?: unknown) => void) => unknown
+  on: (event: 'close' | 'exit' | 'error', listener: (arg?: unknown) => void) => unknown
   kill?: () => unknown
 }
 
@@ -1113,6 +1113,8 @@ export class ManimService {
     collected: number
     percent: number
     tail: string
+    /** Last non-empty output line, so the panel can show that work is happening. */
+    lastLine: string
     running: boolean
     ok: boolean
     error: string
@@ -1143,6 +1145,7 @@ export class ManimService {
       collected: 0,
       percent: 2,
       tail: '',
+      lastLine: '',
       running: true,
       ok: false,
       error: '',
@@ -1156,6 +1159,10 @@ export class ManimService {
     const feed = (chunk: unknown): void => {
       const text = String(chunk)
       job.tail = (job.tail + text).slice(-2000)
+      for (const line of text.split(String.fromCharCode(10))) {
+        const trimmed = line.trim()
+        if (trimmed !== '' && !trimmed.startsWith('##dsh-manim-progress')) job.lastLine = trimmed.slice(0, 200)
+      }
       for (const line of text.split(String.fromCharCode(10))) {
         const step = parseSetupProgress(line)
         if (step === null) continue
@@ -1178,14 +1185,38 @@ export class ManimService {
     // sat at 0% for ten minutes while pip was working perfectly.
     void (async () => {
       await new Promise<void>((resolve) => {
-        child.on('close', () => { clearTimeout(timer); resolve() })
-        child.on('error', (error) => {
+        // `exit` and `close` are not the same event: `close` waits for the child's
+        // stdio pipes to close, and this script runs pip with `stdio: 'inherit'`,
+        // so a grandchild holding the pipe can delay it indefinitely — which left
+        // the job "running" at 97% after the install had actually finished. Settle
+        // on whichever arrives first, then give the pipes a moment to flush.
+        let settled = false
+        const settle = (): void => {
+          if (settled) return
+          settled = true
           clearTimeout(timer)
+          setTimeout(resolve, 300)
+        }
+        child.on('exit', settle)
+        child.on('close', settle)
+        child.on('error', (error) => {
           job.error = error instanceof Error ? error.message : String(error ?? 'spawn failed')
-          resolve()
+          settle()
         })
+        // Watchdog: if the child is gone but nothing signalled it, stop pretending.
+        setTimeout(() => {
+          if (!settled && job.running && job.lastLine === '' && Date.now() - job.startedAt > 5 * 60 * 1000) {
+            job.error = '安装进程没有任何输出，已中止等待'
+            settle()
+          }
+        }, 6 * 60 * 1000)
       })
-      const probe = await this.probe(true).catch((error: unknown) => ({ pythonPresent: false, error: String(error) }))
+      const probe = await Promise.race([
+        this.probe(true).catch((error: unknown) => ({ pythonPresent: false, error: String(error) })),
+        new Promise<{ pythonPresent: boolean; error: string }>((resolve) => {
+          setTimeout(() => resolve({ pythonPresent: false, error: '安装后校验超时' }), 60_000)
+        }),
+      ])
       const present = (probe as { pythonPresent?: unknown }).pythonPresent === true
       job.running = false
       job.percent = 100
@@ -1207,6 +1238,7 @@ export class ManimService {
       phase: job.phase,
       percent: job.percent,
       collected: job.collected,
+      lastLine: job.lastLine,
       elapsedMs: Date.now() - job.startedAt,
       tail: job.tail.slice(-600),
       error: job.error,

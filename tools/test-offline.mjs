@@ -320,12 +320,40 @@ check('the job reports a phase while running',
   && (midway.body.value?.percent ?? 0) >= 0,
   JSON.stringify(midway.body.value).slice(0, 160))
 
-await new Promise((resolve) => setTimeout(resolve, 120))
+// Settling now waits a beat to let the child's pipes flush, then runs a probe.
+await new Promise((resolve) => setTimeout(resolve, 900))
 const settledStatus = await post('/dsh-manim/runtime/setup-status', {})
 check('the job settles after the child exits',
   ['done', 'failed'].includes(settledStatus.body.value?.state)
   && settledStatus.body.value?.percent === 100,
   JSON.stringify(settledStatus.body.value).slice(0, 160))
+
+// The failure users actually hit: `close` waits for the child's stdio pipes, and
+// setup-runtime runs pip with `stdio: 'inherit'`, so a grandchild can hold the pipe
+// open after the script is gone. A child that only emits `exit` must still settle.
+mod.setSetupChildFactory(() => {
+  const child = new EventEmitter()
+  child.stdout = new EventEmitter()
+  child.stderr = new EventEmitter()
+  child.kill = () => {}
+  setTimeout(() => {
+    child.stdout.emit('data', 'installing manim ...' + String.fromCharCode(10))
+    child.stdout.emit('data', '##dsh-manim-progress 92 写入路径' + String.fromCharCode(10))
+    child.emit('exit', 0)
+  }, 20)
+  return child
+})
+const exitOnlyStart = await post('/dsh-manim/runtime/setup', {})
+check('a second install can start after the first settles', exitOnlyStart.body.ok === true)
+const midExit = await post('/dsh-manim/runtime/setup-status', {})
+check('status carries the last output line',
+  typeof midExit.body.value?.lastLine === 'string' || midExit.body.value?.state === 'idle',
+  JSON.stringify(midExit.body.value).slice(0, 160))
+await new Promise((resolve) => setTimeout(resolve, 900))
+const exitOnly = await post('/dsh-manim/runtime/setup-status', {})
+check('a child that only emits exit still settles the job',
+  ['done', 'failed'].includes(exitOnly.body.value?.state) && exitOnly.body.value?.percent === 100,
+  JSON.stringify(exitOnly.body.value).slice(0, 200))
 
 const listResponse = await post('/dsh-manim/list', { root: workspace })
 check('POST /list answers the envelope', listResponse.body.ok === true, JSON.stringify(listResponse.body).slice(0, 200))

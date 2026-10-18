@@ -263,7 +263,7 @@ export interface StudioViewProps {
   /** Build the runtime now. */
   onSetupRuntime?: () => void
   /** Renderer-install progress, when one is running. */
-  setupProgress?: { phase: string; percent: number } | null
+  setupProgress?: { phase: string; percent: number; detail?: string } | null
 }
 
 /**
@@ -371,6 +371,9 @@ export function StudioView(props: StudioViewProps): JSX.Element {
                   <span className={cx('small')}>
                     {`${setupProgress.phase} ${setupProgress.percent}%`}
                   </span>
+                  {setupProgress.detail === undefined || setupProgress.detail === ''
+                    ? null
+                    : <span className={cx('small', 'ellipsis')}>{setupProgress.detail}</span>}
                 </>
               )}
             </div>
@@ -744,7 +747,7 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   /** A runtime build is running right now. */
   const [setupBusy, setSetupBusy] = useState(false)
   /** How far the renderer installation has got, for the bar. */
-  const [setupProgress, setSetupProgress] = useState<{ phase: string; percent: number } | null>(null)
+  const [setupProgress, setSetupProgress] = useState<{ phase: string; percent: number; detail?: string } | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   /** Job id whose index refresh has already been requested, so the poll cannot loop. */
   const refreshedFor = useRef<string>('')
@@ -776,12 +779,24 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
         if (status.state === 'running') {
           setSetupProgress((previous) => {
             const reported = Math.round(status.percent ?? 0)
-            // Move forward even when the host has nothing new: a 10-minute install
-            // with a still bar reads as a hang, so creep toward 97% between reports.
-            const crept = previous === null ? 1 : Math.min(97, previous.percent + 1)
-            return { phase: status.phase ?? '准备中', percent: Math.max(reported, crept) }
+            // Forward motion between host reports, capped below 100 so a finished
+            // bar always means the host said so. 97 was the old cap and read as a
+            // wall; the real signal that work is happening is `detail` below.
+            const crept = previous === null ? 1 : Math.min(99, previous.percent + 1)
+            return {
+              phase: status.phase ?? t('runtime.phase.preparing'),
+              percent: Math.max(reported, crept),
+              detail: typeof status.lastLine === 'string' ? status.lastLine : undefined,
+            }
           })
           continue
+        }
+        if (status.state === 'idle') {
+          // No job on the host (it restarted, or this panel is newer than the job):
+          // fall back to a probe instead of leaving a dead bar on screen.
+          const probe = await api.probe({}).catch(() => null)
+          setRuntimeHint(probe?.pythonPresent === true ? '' : t('runtime.missing'))
+          break
         }
         setSetupProgress({ phase: status.phase ?? '', percent: 100 })
         if (status.state === 'done') {
