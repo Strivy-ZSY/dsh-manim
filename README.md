@@ -70,6 +70,21 @@ node runtime/setup-runtime.mjs --check          # 只检查，不安装
 node runtime/setup-runtime.mjs --python <exe>   # 指定基础解释器
 ```
 
+### 面板从哪里打开
+
+插件**不在左侧栏加自己的一行**：官方客户端的左栏是它自己的（插件 / 自动化任务 / …），
+第三方插件塞一行进去显得突兀。面板作为**右侧栏的一个 tab** 注册，通过右侧栏的标签页
+控件或「开始」页里的入口打开。
+
+如果你的宿主只能在左栏列出插件，可以在 profile patch 里显式要求那一行：
+
+```yaml
+- id: dsh-manim
+  name: 'dsh-manim'
+  config:
+    sidebarEntry: true    # 默认 false；宿主把插件配置传给浏览器半边时生效
+```
+
 ### 装进 DSH
 
 **官方客户端（推荐）** —— 侧栏「插件」→「添加插件」，把仓库地址贴进「包名或地址」→ 安装 → 启用：

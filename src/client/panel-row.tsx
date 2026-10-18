@@ -32,6 +32,8 @@ import { PanelBoundary, useMountReport } from './error-boundary.tsx'
 export interface StudioSeats {
   /** Binds one workspace root to a fresh API client. */
   makeApi: (root: string) => StudioRemote
+  /** Whether to register the left-sidebar row. */
+  sidebarEntry: boolean
   /** The tab system id, the body seat key, and the tab type's kind. */
   id: string
   kind: string
@@ -171,14 +173,17 @@ export function registerManimStudio(ctx: ClientContext, seats: StudioSeats): voi
     key: id,
   }, StudioTabTitle)), 'dsh-manim: 动画工作室 tab title')
 
-  // The sidebar row. Order decides the row's position: the shell sorts
-  // `sidebar.panellist` entries by `order` ascending, and 使用统计 registers at
-  // 30 — sitting at 25 puts 动画 between the 工作台 (20) and it.
-  ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-    name: 'sidebar.panellist',
-    id,
-    order: 25,
-    label: () => t('entry.label'),
-    locale,
-  }, makePanelIcon(openStudio))), 'dsh-manim: sidebar row')
+  // The left-sidebar row is **opt-in** (`config.sidebarEntry`). Shells that ship
+  // their own rail already list 插件 / 自动化任务 / …; a plugin row wedged between
+  // them reads as damage, and the tab is reachable through the right sidebar's own
+  // controls. Set `sidebarEntry: true` in the profile patch to get the row back.
+  if (seats.sidebarEntry === true) {
+    ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+      name: 'sidebar.panellist',
+      id,
+      order: 25,
+      label: () => t('entry.label'),
+      locale,
+    }, makePanelIcon(openStudio))), 'dsh-manim: sidebar row')
+  }
 }

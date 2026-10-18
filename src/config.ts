@@ -67,6 +67,8 @@ export interface Config {
   voicePath: string
   /** Root of the media cache (renders, manim's internal caches, stills). */
   cacheDir: string
+  /** Register a row in the shell's left sidebar (off by default: shells have their own). */
+  sidebarEntry: boolean
   /** Directory holding the renderer venv (outside the package when installed). */
   runtimeDir: string
   /**
@@ -112,6 +114,7 @@ export interface RawConfig {
   voicePath?: unknown
   cacheDir?: unknown
   runtimeDir?: unknown
+  sidebarEntry?: unknown
   outputDir?: unknown
   background?: unknown
   defaultQuality?: unknown
@@ -177,6 +180,10 @@ export function resolveConfig(raw: RawConfig | undefined): Config {
       typeof raw?.runtimeDir === 'string' && raw.runtimeDir !== ''
         ? raw.runtimeDir
         : defaultRuntimeDir(),
+    // Off by default. The official client already owns its left rail, and a
+    // plugin row wedged between its own entries reads as damage rather than as a
+    // feature; the tab is reachable from the right sidebar's own controls.
+    sidebarEntry: raw?.sidebarEntry === true,
     driverPath:
       typeof raw?.driverPath === 'string' && raw.driverPath !== ''
         ? raw.driverPath

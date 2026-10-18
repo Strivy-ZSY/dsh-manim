@@ -71,7 +71,16 @@ function makeApi(root: string): StudioRemote {
  */
 export async function apply(ctx: ClientContext): Promise<void> {
   ctx.effect(() => ctx.locale.register(NS, { zh: ZH, en: EN }), 'dsh-manim: dictionaries')
-  registerManimStudio(ctx, { makeApi, id: MANIM_ID, kind: MANIM_KIND, locale: NS })
+  // `sidebarEntry` arrives through the plugin's config; cordis hands the client
+  // half its resolved config on the same object the host half got.
+  let sidebarEntry = false
+  try {
+    const raw = (ctx as unknown as { config?: { sidebarEntry?: unknown } }).config
+    sidebarEntry = raw?.sidebarEntry === true
+  } catch {
+    sidebarEntry = false
+  }
+  registerManimStudio(ctx, { makeApi, id: MANIM_ID, kind: MANIM_KIND, locale: NS, sidebarEntry })
   // Rendered .mp4 files are ours, and the shell's own preview set has no video
   // renderer: without this, clicking one opens an empty tab. A shell without the
   // document-preview service must not lose the studio over it — activation
