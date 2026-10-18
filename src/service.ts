@@ -1003,6 +1003,40 @@ export class ManimService {
   }
 
   /**
+   * Build the render runtime on the user's behalf.
+   *
+   * The venv is ~500 MB of Python and cannot be produced at install time (a
+   * package install must not run a long download, and pnpm would gate a build
+   * script anyway). Doing it from a button here is the difference between "read
+   * this command and go find the install directory" and "click 搭建运行时".
+   *
+   * @returns the tail of the run and a fresh probe.
+   */
+  async setupRuntime(): Promise<{ ok: boolean; code: number; output: string; probe: Record<string, unknown> }> {
+    const script = join(PLUGIN_ROOT, 'runtime', 'setup-runtime.mjs')
+    if (!existsSync(script)) {
+      return { ok: false, code: -1, output: `missing ${script}`, probe: await this.probe(true) }
+    }
+    const output = await new Promise<string>((resolve) => {
+      const child = spawn(process.execPath, [script], { cwd: PLUGIN_ROOT, windowsHide: true })
+      let buffer = ''
+      const collect = (chunk: unknown): void => {
+        buffer += String(chunk)
+        if (buffer.length > 8000) buffer = buffer.slice(-8000)
+      }
+      child.stdout?.on('data', collect)
+      child.stderr?.on('data', collect)
+      const timer = setTimeout(() => { try { child.kill() } catch { /* already gone */ } }, 30 * 60 * 1000)
+      child.on('close', (code) => { clearTimeout(timer); resolve(`${buffer}
+[exit ${String(code)}]`) })
+      child.on('error', (error) => { clearTimeout(timer); resolve(`${buffer}
+[spawn error] ${error.message}`) })
+    })
+    const probe = await this.probe(true)
+    return { ok: probe.pythonPresent === true, code: probe.pythonPresent === true ? 0 : 1, output, probe }
+  }
+
+  /**
    * Append a browser-side failure to a file next to the render cache.
    *
    * Written for one reason: when the panel is what breaks, the renderer console is

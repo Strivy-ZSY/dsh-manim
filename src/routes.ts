@@ -524,6 +524,11 @@ export function registerManimRoutes(
         }
         return
       }
+      case '/dsh-manim/runtime/setup': {
+        // Long-running by nature; the panel shows a busy state while it waits.
+        json(res, { ok: true, value: await service.setupRuntime() })
+        return
+      }
       case '/dsh-manim/client-log': {
         // Browser-side failures land here so they survive the renderer: the panel
         // itself may be the thing that is broken.

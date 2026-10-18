@@ -260,6 +260,8 @@ export interface StudioViewProps {
   onSelectVideo?: (rel: string) => void
   /** A blocking reason the renderer cannot run yet, already localised. */
   runtimeHint?: string
+  /** Build the runtime now. */
+  onSetupRuntime?: () => void
 }
 
 /**
@@ -273,7 +275,7 @@ export function StudioView(props: StudioViewProps): JSX.Element {
     data, selected, sceneClass, quality, job, frames, error, busy, showLog,
     onSelect, onSceneClass, onQuality, onRender, onCancel, onRefresh, onStoryboard,
     onNewScene, onToggleLog, frameUrl, videoUrl, onSeek, videoRef,
-    videoFile, onSelectVideo, runtimeHint,
+    videoFile, onSelectVideo, runtimeHint, onSetupRuntime,
   } = props
 
   const entry = data?.scenes.find((scene) => scene.path === selected) ?? null
@@ -347,7 +349,16 @@ export function StudioView(props: StudioViewProps): JSX.Element {
     <div className={cx('studio')} data-dsh-manim-pane="">
       {data === null && error === null ? <div className={cx('notice')}>{t('panel.loading')}</div> : null}
       {runtimeHint !== undefined && runtimeHint !== ''
-        ? <div className={cx('error')}>{runtimeHint}</div>
+        ? (
+            <div className={cx('error')}>
+              <span>{runtimeHint}</span>
+              {onSetupRuntime === undefined ? null : (
+                <Button size="sm" variant="primary" disabled={busy} onClick={onSetupRuntime}>
+                  {t('runtime.setup')}
+                </Button>
+              )}
+            </div>
+          )
         : null}
 
       {/* toolbar — every control here is a shell primitive, so the panel wears
@@ -708,6 +719,8 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   const [videoFile, setVideoFile] = useState('')
   /** Why the renderer cannot run yet, in the user's language. */
   const [runtimeHint, setRuntimeHint] = useState('')
+  /** A runtime build is running right now. */
+  const [setupBusy, setSetupBusy] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   /** Job id whose index refresh has already been requested, so the poll cannot loop. */
   const refreshedFor = useRef<string>('')
@@ -721,6 +734,22 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   const framesKey = useRef<string>('')
 
   // --- data -----------------------------------------------------------------
+
+  /** Build the venv, then re-check so the banner disappears on success. */
+  const setupRuntime = useCallback(async (): Promise<void> => {
+    if (api === null || setupBusy) return
+    setSetupBusy(true)
+    setRuntimeHint(t('runtime.building'))
+    try {
+      const result = await api.setupRuntime()
+      const probe = result.probe ?? {}
+      setRuntimeHint(probe.pythonPresent === true ? '' : t('runtime.missing'))
+    } catch (failure) {
+      setRuntimeHint(failure instanceof Error ? failure.message : String(failure))
+    } finally {
+      setSetupBusy(false)
+    }
+  }, [api, setupBusy])
 
   // The renderer lives in a venv the plugin builds itself, and an installed copy
   // has none until `setup-runtime.mjs` runs. Saying so beats a bare
@@ -1069,6 +1098,7 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
       videoFile={videoFile}
       onSelectVideo={(rel) => setVideoFile(rel)}
       runtimeHint={runtimeHint}
+      onSetupRuntime={() => void setupRuntime()}
     />
   )
 }

@@ -56,6 +56,7 @@ export const MANIM_KIND = 'manim'
  * exactly the trap dsh-ppt's preview harness fell into first.
  */
 export { Studio, StudioView }
+export { detectedWorkspaceRoot } from './workspace-root.ts'
 export type { SessionListStore, StudioViewProps } from './studio.tsx'
 
 /** Bind one workspace root to a fresh API client (rebuilt on session switch). */
@@ -76,8 +77,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // document-preview service must not lose the studio over it — activation
   // failures are fatal to startup (crash-*.log: "dsh-manim: failed").
   // Which workspace is open is the shell's fact, not something to ask the user.
+  let sessionStore: unknown
   try {
-    registerWorkspaceDetection(ctx)
+    sessionStore = (ctx as unknown as { sessions?: { list?: unknown } }).sessions?.list
+  } catch {
+    sessionStore = undefined
+  }
+  try {
+    registerWorkspaceDetection(ctx, sessionStore as never)
   } catch (error) {
     console.warn('[dsh-manim] workspace detection skipped:', error)
   }

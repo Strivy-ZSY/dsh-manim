@@ -1,36 +1,40 @@
 /**
- * The workspace the shell currently has open, read through its own service.
+ * Which workspace the panel is in.
  *
- * The panel used to derive this from the session list, then from a host lookup by
- * session id, and asked the user to pick when both came back empty — which reads
- * as "the plugin does not know where I am" even though the shell does. The shell's
- * own selection is the authority; everything else is a fallback for shells that do
- * not offer it.
+ * The answer already exists in the client: `ctx.workspaces` holds the shell's
+ * workspace rows, and each row lists the sessions that live under it
+ * (`WorkspaceView.sessionIds`), while `ctx.sessions.list.getSnapshot().current`
+ * names the session on screen. Intersecting the two is exact — no directory
+ * guessing, and no question for the user.
  *
- * The service is read through `ctx.inject`, so a shell without it simply never
- * calls back: no capability, no failure.
+ * Why not the session's `cwd`: the list is projected from persisted headers and
+ * `cwd` is optional there, so a perfectly open session can carry no directory at
+ * all. That is what kept producing "pick a workspace" over an open project.
+ *
+ * Both services are read through `ctx.inject`, so a shell without them simply
+ * never calls back and the older fallbacks still apply.
  *
  * @module dsh-manim/client/workspace-root
  */
 
-/** Latest root the shell reported ('' when unknown). */
+/** Latest root derived from the shell ('' when unknown). */
 let detected = ''
 
-/** Subscribers that re-render when the shell's selection changes. */
+/** Subscribers that re-render when the derivation changes. */
 const listeners = new Set<() => void>()
 
-/** The shell-reported root, '' when there is none yet. */
+/** The shell-derived root, '' when there is none. */
 export function detectedWorkspaceRoot(): string {
   return detected
 }
 
-/** Subscribe to changes of the shell-reported root. */
+/** Subscribe to changes of the derived root. */
 export function subscribeWorkspaceRoot(listener: () => void): () => void {
   listeners.add(listener)
   return () => { listeners.delete(listener) }
 }
 
-/** Publish a new root when it actually changed. */
+/** Publish only real changes. */
 function publish(next: string): void {
   if (next === detected) return
   detected = next
@@ -38,93 +42,118 @@ function publish(next: string): void {
     try {
       listener()
     } catch {
-      // A broken subscriber must not break the others.
+      // One broken subscriber must not take the rest down.
     }
   }
 }
 
-/** The path a workspace-ish value names, or ''. */
-function pathOf(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (value === null || typeof value !== 'object') return ''
-  const record = value as Record<string, unknown>
-  for (const key of ['path', 'root', 'directory', 'dir']) {
-    const candidate = record[key]
-    if (typeof candidate === 'string' && candidate !== '') return candidate
-  }
-  return ''
+/** The slice of a workspace row this module reads. */
+interface WorkspaceRow {
+  path?: unknown
+  title?: unknown
+  sessionIds?: unknown
 }
 
-/** Best-effort read of the controller's current workspace selection. */
-function readController(controller: unknown): string {
-  if (controller === null || typeof controller !== 'object') return pathOf(controller)
-  const record = controller as Record<string, unknown>
-  // Shapes seen or plausible: a value, a getter, or state {current}.
-  const direct = pathOf(record.current ?? record.selected ?? record.active ?? record.workspace)
-  if (direct !== '') return direct
-  for (const key of ['getCurrent', 'currentWorkspace', 'getSelected']) {
-    const fn = record[key]
-    if (typeof fn === 'function') {
-      try {
-        const value = pathOf((fn as () => unknown).call(controller))
-        if (value !== '') return value
-      } catch {
-        // Try the next spelling.
-      }
-    }
+/** The slice of the sessions list store this module reads. */
+interface SessionsStore {
+  getSnapshot?: () => { current?: unknown; byId?: unknown }
+  subscribe?: (listener: () => void) => unknown
+}
+
+/** The slice of `ctx.workspaces` this module reads. */
+interface WorkspacesService {
+  list?: {
+    getSnapshot?: () => { items?: unknown }
+    subscribe?: (listener: () => void) => unknown
   }
-  const state = record.state
-  if (state !== null && typeof state === 'object') {
-    const nested = pathOf((state as Record<string, unknown>).current ?? (state as Record<string, unknown>).selected)
-    if (nested !== '') return nested
+}
+
+/** Strings only. */
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+/** The session id currently on screen. */
+function currentSessionId(sessions: SessionsStore | undefined): string {
+  try {
+    return text(sessions?.getSnapshot?.().current)
+  } catch {
+    return ''
   }
-  // A selection expressed as an id: resolve it against the list.
-  const id = record.currentId ?? record.selectedId
-  const list = record.list
-  if (typeof list === 'function') {
-    try {
-      const rows = (list as () => unknown).call(controller)
-      if (Array.isArray(rows)) {
-        const hit = typeof id === 'string'
-          ? rows.find((row) => row !== null && typeof row === 'object' && (row as Record<string, unknown>).id === id)
-          : rows[0]
-        const value = pathOf(hit)
-        if (value !== '') return value
-      }
-    } catch {
-      // Fall through.
-    }
+}
+
+/** A directory a session records, when the shell exposes one at all. */
+function sessionCwd(sessions: SessionsStore | undefined, id: string): string {
+  try {
+    const byId = sessions?.getSnapshot?.().byId as Record<string, { cwd?: unknown }> | undefined
+    if (byId === undefined || id === '') return ''
+    return text(byId[id]?.cwd)
+  } catch {
+    return ''
   }
+}
+
+/** Pick the workspace the given session belongs to. */
+function derive(workspaces: WorkspacesService | undefined, sessions: SessionsStore | undefined): string {
+  let rows: WorkspaceRow[] = []
+  try {
+    const items = workspaces?.list?.getSnapshot?.().items
+    if (Array.isArray(items)) rows = items as WorkspaceRow[]
+  } catch {
+    return ''
+  }
+  if (rows.length === 0) return ''
+
+  const id = currentSessionId(sessions)
+  if (id !== '') {
+    const owner = rows.find((row) => Array.isArray(row.sessionIds) && row.sessionIds.includes(id))
+    const path = text(owner?.path)
+    if (path !== '') return path
+  }
+
+  // No session match: a directory the session records is still authoritative.
+  const cwd = sessionCwd(sessions, id).replaceAll(String.fromCharCode(92), '/').replace(/\/+$/, '')
+  if (cwd !== '') {
+    const inside = rows.find((row) => {
+      const path = text(row.path).replaceAll(String.fromCharCode(92), '/').replace(/\/+$/, '')
+      return path !== '' && (cwd === path || cwd.startsWith(`${path}/`))
+    })
+    const found = text(inside?.path)
+    if (found !== '') return found
+  }
+
+  // One workspace is unambiguous.
+  if (rows.length === 1) return text(rows[0]?.path)
   return ''
 }
 
 /**
- * Follow the shell's current workspace, when the shell offers the service.
+ * Follow the derived root for as long as the shell keeps reporting it.
  *
  * @param ctx - client root context.
+ * @param sessions - the session list store the panel already subscribes to.
  */
-export function registerWorkspaceDetection(ctx: unknown): void {
-  const runtime = ctx as { inject?: (names: string[], callback: (scope: Record<string, unknown>) => unknown) => unknown }
+export function registerWorkspaceDetection(ctx: unknown, sessions?: SessionsStore): void {
+  const runtime = ctx as {
+    inject?: (names: string[], callback: (scope: Record<string, unknown>) => unknown) => unknown
+  }
   if (typeof runtime.inject !== 'function') return
   try {
-    runtime.inject(['workspaceController'], (scope) => {
-      const controller = scope.workspaceController
-      const read = (): void => { publish(readController(controller)) }
-      read()
-      const record = controller as Record<string, unknown> | null
-      for (const key of ['subscribe', 'onChange', 'on', 'watch']) {
-        const fn = record?.[key]
-        if (typeof fn === 'function') {
+    runtime.inject(['workspaces'], (scope) => {
+      const workspaces = scope.workspaces as WorkspacesService | undefined
+      const update = (): void => { publish(derive(workspaces, sessions)) }
+      update()
+      for (const source of [workspaces?.list, sessions]) {
+        if (source !== undefined && typeof source.subscribe === 'function') {
           try {
-            ;(fn as (cb: () => void) => unknown).call(controller, read)
-            break
+            source.subscribe(update)
           } catch {
-            // Unsupported signature; polling is not worth it — the next mount re-reads.
+            // A store that refuses the subscription still leaves the first read.
           }
         }
       }
     })
   } catch {
-    // No controller: the session/host fallbacks still apply.
+    // No workspace service in this shell: the host fallbacks still apply.
   }
 }

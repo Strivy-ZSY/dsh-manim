@@ -127,7 +127,22 @@ const clientBase = {
   effect: (fn) => { try { fn() } catch {} },
   locale: { register: () => () => {} },
   slots: { inject: (_name, fn) => { fn(); return () => {} }, register: () => () => {} },
-  sessions: { list: { getSnapshot: () => ({ items: [], current: undefined, state: 'idle' }), subscribe: () => () => {} } },
+  // Official shapes: `ctx.sessions.list` is a snapshot store whose `current`
+  // always names the session on screen; `ctx.workspaces.list` rows carry the
+  // sessions that live under them (`sessionIds`). Their intersection is how the
+  // panel learns which workspace it is in without asking.
+  sessions: { list: { getSnapshot: () => ({ ids: ['s1'], byId: {}, current: 's1', phase: 'ready' }), subscribe: () => () => {} } },
+  workspaces: {
+    list: {
+      getSnapshot: () => ({
+        items: [
+          { workspaceId: 'w1', path: 'C:/work/111', title: '111', sessionIds: ['s1'] },
+          { workspaceId: 'w2', path: 'C:/work/default', title: 'default-workspace', sessionIds: [] },
+        ],
+      }),
+      subscribe: () => () => {},
+    },
+  },
   sidebarRight: { openTab: () => {} },
   sidebarRightTabs: { register: () => () => {} },
   documentPreviews: { register: (definition) => { registeredPreview = definition } },
@@ -201,6 +216,13 @@ for (const [label, table] of [
 }
 
 // ---------------------------------------------------------------------------
+// The panel must land in the workspace whose session is on screen — the exact
+// complaint when it asked instead: two workspaces registered, session in one.
+check(
+  'workspace root follows the session on screen',
+  client.detectedWorkspaceRoot() === 'C:/work/111',
+  JSON.stringify(client.detectedWorkspaceRoot()),
+)
 check('video preview registers through the optional dependency', registeredPreview?.id === 'dsh-manim-video', JSON.stringify(registeredPreview?.extensions ?? null))
 
 console.log(`\n${passed} passed, ${failures.length} failed`)

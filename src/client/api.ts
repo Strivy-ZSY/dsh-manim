@@ -105,6 +105,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 export interface StudioRemote {
   /** The host's registered workspace roots — the fallback when the session has no cwd. */
   workspaces: () => Promise<{ roots: WorkspaceRoot[] }>
+  /** Build the render runtime (venv) on the user's behalf. */
+  setupRuntime: () => Promise<{ ok: boolean; code: number; output: string; probe: Record<string, unknown> }>
   /** The workspace root the given session belongs to, resolved by the host. */
   sessionRoot: (sessionId: string, cwd?: string) => Promise<{ path: string | null }>
   list: (request: { root: string; refresh?: boolean }) => Promise<ListResult>
@@ -137,6 +139,10 @@ export class StudioApi implements StudioRemote {
 
   workspaces(): Promise<{ roots: WorkspaceRoot[] }> {
     return post<{ roots: WorkspaceRoot[] }>('/dsh-manim/workspaces', {})
+  }
+
+  setupRuntime(): Promise<{ ok: boolean; code: number; output: string; probe: Record<string, unknown> }> {
+    return post<{ ok: boolean; code: number; output: string; probe: Record<string, unknown> }>('/dsh-manim/runtime/setup', {})
   }
 
   sessionRoot(sessionId: string, cwd?: string): Promise<{ path: string | null }> {
