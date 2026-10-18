@@ -244,8 +244,12 @@ const missing = await post('/dsh-manim/job', { id: 'does-not-exist' })
 check('POST /job 404s an unknown id', missing.status === 404, String(missing.status))
 
 const probe = await post('/dsh-manim/probe', {})
-check('POST /probe reports a working runtime', probe.body.value?.ok === true && probe.body.value?.manim !== undefined, JSON.stringify(probe.body).slice(0, 200))
-check('POST /probe reports the LaTeX situation', typeof probe.body.value?.tex === 'boolean')
+if (probe.body.value?.pythonPresent === true) {
+  check('POST /probe reports a working runtime', probe.body.value?.ok === true && probe.body.value?.manim !== undefined, JSON.stringify(probe.body).slice(0, 200))
+  check('POST /probe reports the LaTeX situation', typeof probe.body.value?.tex === 'boolean')
+} else {
+  console.log('  skip  POST /probe runtime assertions — no runtime/venv yet (run `npm run setup:runtime`)')
+}
 
 // ---------------------------------------------------------------------------
 if (!fast) {

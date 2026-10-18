@@ -123,13 +123,14 @@ export interface RawConfig {
  *
  * `runtime/setup-runtime.mjs` creates it; `runtime/README.md` explains why the
  * plugin carries a virtual environment instead of using whatever `python` is on
- * PATH (short version: anaconda's base environment is the user's, and installing
- * a renderer into it is not this plugin's business).
+ * PATH (short version: the user's environment is the user's, and installing a
+ * renderer into it is not this plugin's business).
  */
 export function defaultPythonPath(): string {
   const root = join(PLUGIN_ROOT, 'runtime', 'venv')
-  const windows = join(root, 'Scripts', 'python.exe')
-  return existsSync(windows) ? windows : join(root, 'bin', 'python')
+  // Platform decides the layout; existence must not, or a missing venv reports
+  // the other platform's path and the "runtime missing" message gets confusing.
+  return process.platform === 'win32' ? join(root, 'Scripts', 'python.exe') : join(root, 'bin', 'python')
 }
 
 /** Apply defaults to the raw loader config. */

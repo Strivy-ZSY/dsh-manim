@@ -15,9 +15,9 @@
 为什么用 `manimkit` 而不是裸 manim：
   * `text()` 会自动按内容选中文字体（Pango 遇到缺字是画一排空心方块，不是报错）；
   * `caption()` / `panel()` / `chip()` / `section_title()` 给出统一版式，换一集不用重新调；
-  * `mathtex()` 用来排版公式 —— 这台机器没有可用的 LaTeX（MiKTeX 跑
-    standalone 会崩，dvisvgm 也缺），所以 **不要用 `MathTex` / `Tex`**，
-    它们在第一个公式处就抛 `latex error converting to dvi`。
+  * `mathtex()` 用来排版公式（matplotlib mathtext，不依赖 LaTeX），所以
+    **不要用 `MathTex` / `Tex`** —— 那两个要完整 TeX 发行版 + dvisvgm，
+    缺了就在第一个公式处抛 `latex error converting to dvi`。
     ⚠️ 公式里**不要写中文**，matplotlib 的数学字体没有 CJK，会静默画成一排空框；
     中文用 `text()` 单独放。（`mathtex()` 现在会直接报错拦住这种写法。）
   * `narration()` / `hold()` 把旁白挂上去，并让画面撑到那句说完。

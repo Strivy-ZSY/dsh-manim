@@ -37,11 +37,11 @@ const root = path.resolve(here, '..')
 /** Build stamp baked into the browser bundle; also the bundle's identity in a page. */
 const PLUGIN_ID = 'dsh-manim'
 
-/** esbuild lives in the neighbouring drawio dev tree (no install needed here). */
+/** esbuild comes from this package's own devDependencies (`npm install`). */
 const ESBUILD_ROOTS = [
   path.join(root, 'node_modules'),
-  path.join(process.env.USERPROFILE ?? '', '.idsh', 'local', 'dsh-drawio-dev', 'tools', 'node_modules'),
-]
+  process.env.DSH_ESBUILD_ROOT ?? '',
+].filter((entry) => entry !== '')
 
 /** Load esbuild from whichever tree has it. */
 async function loadEsbuild() {
@@ -52,7 +52,7 @@ async function loadEsbuild() {
       return module.build ?? module.default?.build
     }
   }
-  throw new Error('esbuild not found — expected ~/.idsh/local/dsh-drawio-dev/tools/node_modules/esbuild')
+  throw new Error('esbuild not found — run `npm install` first (it is a devDependency), or point DSH_ESBUILD_ROOT at a node_modules tree that has it')
 }
 
 /**
@@ -100,7 +100,6 @@ const SHELL_MODULES = [
   'E:\\DSH Desktop\\resources\\app\\node_modules',
   'D:\\DSH Desktop\\resources\\app\\node_modules',
   path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'DSH Desktop', 'resources', 'app', 'node_modules'),
-  path.join(process.env.USERPROFILE ?? '', '.idsh', 'profiles', 'desktop', 'node_modules'),
 ].filter((entry) => typeof entry === 'string' && entry !== '')
 
 /** The shell packages this build inlines instead of leaving external. */

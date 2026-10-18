@@ -14,11 +14,10 @@ description: >
 
 ---
 
-## 0. 先记住这台机器的四件事
+## 0. 先记住四条硬约束
 
-1. **不要用 `MathTex` / `Tex`。** 这台机器上 LaTeX 是坏的（MiKTeX 2.9 编译
-   `standalone` 直接段错误，`dvisvgm` 根本没装，也没有任何 pip wheel 提供它）。
-   写 `MathTex` 的场景会在第一个公式处抛
+1. **不要用 `MathTex` / `Tex`。** 它们要一整套 TeX 发行版加 `dvisvgm`，这个组合在
+   很多机器上缺或坏（Windows 尤其常见），写了就会在第一个公式处抛
    `ValueError: latex error converting to dvi`。
    **公式一律用 `manimkit.mathtex()`**（内部走 matplotlib 的 mathtext，
    支持 `\frac \sqrt \sum \int \mathbb \mathcal \hat` 和上下标）。
@@ -64,7 +63,7 @@ description: >
 
 ## 2. 旁白：让片子会说话
 
-**不需要下载任何语音模型。** 这台机器上已经有两条路：
+**不需要下载任何语音模型。** 现成两条路：
 
 | 引擎 | 音质 | 需要什么 | 音色 |
 |---|---|---|---|

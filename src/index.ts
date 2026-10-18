@@ -59,9 +59,9 @@ export type { ManimToolResult } from './tools.ts'
 export async function apply(ctx: Context, config: Config): Promise<void> {
   const resolved = resolveConfig(config)
 
-  // The positive marker the isolated-launch test greps for. A plugin that
-  // loads but silently fails to attach looks identical to one that was never
-  // listed, and nothing else in this file can prove it ran.
+  // A positive attach marker on the log. A plugin that loads but silently fails
+  // to attach looks identical to one that was never listed, and nothing else in
+  // this file can prove it ran.
   try {
     ctx.logger?.info?.('dsh-manim: 动画工作室已 attach')
   } catch {

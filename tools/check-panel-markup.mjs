@@ -27,11 +27,12 @@ const require = createRequire(import.meta.url)
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
 
-/** React is not a plugin dependency; take it from the installed DSH runtime. */
+/** React comes from devDependencies; a DSH install tree is accepted as a fallback. */
 const bases = [
-  path.join(process.env.USERPROFILE ?? '', '.idsh', 'profiles', 'desktop', 'node_modules'),
-  'E:\\DSH Desktop\\resources\\app\\node_modules',
-]
+  path.join(root, 'node_modules'),
+  process.env.DSH_SHELL_MODULES ?? '',
+  path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'DSH Desktop', 'resources', 'app', 'node_modules'),
+].filter((entry) => entry !== '')
 const modules = bases.find((base) => {
   try {
     readFileSync(path.join(base, 'react', 'package.json'))
@@ -41,8 +42,9 @@ const modules = bases.find((base) => {
   }
 })
 if (modules === undefined) {
-  console.error(`FAIL: no react install found in\n  ${bases.join('\n  ')}`)
-  process.exit(1)
+  console.log('SKIP: react / react-dom not installed — run `npm install` to enable this check')
+  console.log('      looked in:\n  ' + bases.join('\n  '))
+  process.exit(0)
 }
 const appRequire = createRequire(path.join(modules, 'noop.js'))
 const React = appRequire('react')

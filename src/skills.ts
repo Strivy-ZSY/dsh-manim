@@ -9,8 +9,8 @@
  * are the precedents for this shape.
  *
  * This is also what makes the method survive a cleared workspace: the skill
- * lives under `~/.idsh/local/dsh-manim/skills/`, is registered process-wide on
- * every boot, and therefore shows up in **every** workspace — including ones
+ * lives under this package's own `skills/` directory, is registered process-wide
+ * on every boot, and therefore shows up in **every** workspace — including ones
  * that have never rendered a frame.
  *
  * @module dsh-manim/skills

@@ -1,9 +1,9 @@
 """Formulas without LaTeX.
 
-Manim's `Tex` and `MathTex` shell out to `latex` and then `dvisvgm`. On this
-machine neither can serve them — the MiKTeX 2.9 install segfaults on the
-`standalone` class, and `dvisvgm` is absent from the distribution and from every
-pip wheel — so a scene that reaches for `MathTex` dies at its first formula with
+Manim's `Tex` and `MathTex` shell out to `latex` and then `dvisvgm`. That is a
+heavy and fragile dependency: it needs a full TeX distribution plus `dvisvgm`,
+and on plenty of machines — Windows especially — one of the two is missing or
+broken. A scene that reaches for `MathTex` there dies at its first formula with
 
     ValueError: latex error converting to dvi
 

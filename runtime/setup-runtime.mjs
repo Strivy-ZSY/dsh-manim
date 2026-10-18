@@ -5,27 +5,27 @@
  * environment under `runtime/venv` and installs manim into it, for three
  * reasons:
  *
- * 1. **The user's interpreter is theirs.** This machine's `python` is anaconda's
- *    base environment, which already carries numpy/scipy/opencv for real work.
- *    Installing a renderer into it is not a plugin's business, and pinning
- *    numpy down to what manim wants is a good way to break somebody's project.
- * 2. **`pip` availability is not a given.** Anaconda's base environment is the
- *    one place `pip install` is the wrong answer; a venv makes that decision
- *    once, here, instead of on every render.
+ * 1. **The user's interpreter is theirs.** People run numpy/scipy/opencv out of
+ *    their own environment for real work. Installing a renderer into it is not a
+ *    plugin's business, and pinning numpy down to what manim wants is a good way
+ *    to break somebody's project.
+ * 2. **`pip` availability is not a given.** A conda base env is the one place
+ *    `pip install` is the wrong answer; a venv makes that decision once, here,
+ *    instead of on every render.
  * 3. **Reproducibility.** `manim==0.22.0` in a venv is a fact the plugin can
  *    state; "whatever manim is on PATH" is not, and the difference shows up as a
  *    render that works on one machine and not another.
  *
  * Why the versions are pinned, and why matplotlib is here at all:
  *
- * * `manim` 0.22 is the version the user's own checkout (`manim-main`) is, and
- *   it encodes through PyAV in-process — **no ffmpeg binary is needed**, which is
- *   the single biggest reason this runtime is installable at all on a Windows box
- *   with nothing on PATH.
- * * `matplotlib` is not a manim dependency. It is what `manimkit.mathtex()` uses
- *   to typeset formulas, because this machine has no working LaTeX: the MiKTeX
- *   2.9 install segfaults on the `standalone` class, `dvisvgm` is missing
- *   entirely, and no pip wheel ships it.
+ * * `manim` 0.22 encodes through PyAV in-process — **no ffmpeg binary is needed**,
+ *   which is the single biggest reason this runtime installs cleanly on a Windows
+ *   box with nothing on PATH.
+ * * `matplotlib` is not a manim dependency. It is what `manimkit.mathtex()` uses to
+ *   typeset formulas, so the plugin needs **no TeX distribution and no `dvisvgm`**
+ *   — a full LaTeX toolchain is the most common thing missing (or broken) on a
+ *   fresh machine. If a working LaTeX *is* present, `has_latex()` upgrades to real
+ *   `MathTex` automatically.
  *
  * Usage:
  *
