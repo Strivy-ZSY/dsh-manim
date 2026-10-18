@@ -30,10 +30,20 @@ export interface WorkspaceRoot {
   name: string
 }
 
+/** A finished film found in the workspace, indexed or not. */
+export interface VideoFile {
+  rel: string
+  name: string
+  at: number
+  size: number
+}
+
 /** What `/list` answers with. */
 export interface ListResult {
   root: string
   scenes: SceneEntry[]
+  /** Films on disk under the output directory — what the 文件 menu offers. */
+  videos?: VideoFile[]
   jobs: Array<Record<string, unknown> & { id: string; state: string }>
   qualities: QualityOption[]
   defaultQuality: string
@@ -96,7 +106,7 @@ export interface StudioRemote {
   /** The host's registered workspace roots — the fallback when the session has no cwd. */
   workspaces: () => Promise<{ roots: WorkspaceRoot[] }>
   /** The workspace root the given session belongs to, resolved by the host. */
-  sessionRoot: (sessionId: string) => Promise<{ path: string | null }>
+  sessionRoot: (sessionId: string, cwd?: string) => Promise<{ path: string | null }>
   list: (request: { root: string; refresh?: boolean }) => Promise<ListResult>
   inspect: (request: { root: string; path: string }) => Promise<InspectResult>
   render: (request: { root: string; path: string; scene?: string; quality?: string }) => Promise<{ job: JobView }>
@@ -115,7 +125,7 @@ export interface StudioRemote {
   template: (request: { root: string; name?: string; dir?: string }) => Promise<{ path: string; scene: string; rel: string }>
   probe: (request: { force?: boolean }) => Promise<Record<string, unknown>>
   /** A URL usable directly as a `<video src>`. */
-  videoUrl: (request: { id?: string; root?: string; path?: string; scene?: string; quality?: string }) => string
+  videoUrl: (request: { id?: string; root?: string; path?: string; scene?: string; quality?: string; file?: string }) => string
   /** A URL usable directly as an `<img src>`. */
   frameUrl: (file: string) => string
 }
@@ -129,8 +139,8 @@ export class StudioApi implements StudioRemote {
     return post<{ roots: WorkspaceRoot[] }>('/dsh-manim/workspaces', {})
   }
 
-  sessionRoot(sessionId: string): Promise<{ path: string | null }> {
-    return post<{ path: string | null }>('/dsh-manim/session-root', { sessionId })
+  sessionRoot(sessionId: string, cwd?: string): Promise<{ path: string | null }> {
+    return post<{ path: string | null }>('/dsh-manim/session-root', { sessionId, cwd })
   }
 
   list(request: { root: string; refresh?: boolean }): Promise<ListResult> {
@@ -189,10 +199,13 @@ export class StudioApi implements StudioRemote {
     return post<Record<string, unknown>>('/dsh-manim/probe', { force: request.force === true })
   }
 
-  videoUrl(request: { id?: string; root?: string; path?: string; scene?: string; quality?: string }): string {
+  videoUrl(request: { id?: string; root?: string; path?: string; scene?: string; quality?: string; file?: string }): string {
     const query = new URLSearchParams()
     if (request.id !== undefined) query.set('id', request.id)
-    else {
+    else if (request.file !== undefined) {
+      query.set('root', this.root)
+      query.set('file', request.file)
+    } else {
       query.set('root', this.root)
       if (request.path !== undefined) query.set('path', request.path)
       if (request.scene !== undefined) query.set('scene', request.scene)

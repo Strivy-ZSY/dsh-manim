@@ -20,6 +20,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { StudioApi, type StudioRemote } from './api.ts'
 import { registerManimStudio } from './panel-row.tsx'
 import { registerVideoPreview } from './video-preview.tsx'
+import { registerWorkspaceDetection } from './workspace-root.ts'
 import { Studio, StudioView } from './studio.tsx'
 import { EN, ZH } from './locales.ts'
 
@@ -74,6 +75,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // renderer: without this, clicking one opens an empty tab. A shell without the
   // document-preview service must not lose the studio over it — activation
   // failures are fatal to startup (crash-*.log: "dsh-manim: failed").
+  // Which workspace is open is the shell's fact, not something to ask the user.
+  try {
+    registerWorkspaceDetection(ctx)
+  } catch (error) {
+    console.warn('[dsh-manim] workspace detection skipped:', error)
+  }
   try {
     registerVideoPreview(ctx)
   } catch (error) {

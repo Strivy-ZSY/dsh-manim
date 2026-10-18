@@ -416,6 +416,26 @@ const noFiles = render({
 })
 const emptyFileMenu = menuItems('fileMenu')
 check('an empty workspace lists no videos', emptyFileMenu.every((item) => item.id === undefined), JSON.stringify(emptyFileMenu).slice(0, 160))
+
+// Films that exist on disk but were never indexed by this installation are the
+// case a real workspace hit: `animations/*.mp4` present, menu claiming "no
+// finished film". The list is built from the workspace listing, not the index.
+const withDiskVideos = render({
+  data: {
+    ...data,
+    scenes: [{ ...sceneA, renders: [] }],
+    videos: [{ rel: 'animations/Intro-1080p60.mp4', name: 'Intro-1080p60.mp4', at: Date.now(), size: 1024 }],
+  },
+  selected: sceneA.path,
+  sceneClass: 'Intro',
+  quality: 'draft',
+})
+const diskMenu = menuItems('fileMenu')
+check('a film on disk appears in the 文件 menu',
+  (diskMenu ?? []).some((item) => item.id === 'file:animations/Intro-1080p60.mp4'),
+  JSON.stringify(diskMenu).slice(0, 200))
+void withDiskVideos
+
 check('the empty 文件 menu says why', emptyFileMenu.some((item) => typeof item.text === 'string' && item.text !== ''), JSON.stringify(emptyFileMenu).slice(0, 160))
 void noFiles
 

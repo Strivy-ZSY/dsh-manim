@@ -23,7 +23,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
-import { extname, resolve } from 'node:path'
+import { extname, isAbsolute, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { QUALITIES, type Config } from './config.ts'
@@ -252,6 +252,21 @@ export function registerManimRoutes(
             file = record?.video ?? null
           }
           if (file === null) {
+            // A film the user picked straight off the workspace: verify it is
+            // inside a registered workspace and is a video before serving bytes.
+            const root = url.searchParams.get('root') ?? ''
+            const rel = url.searchParams.get('file') ?? ''
+            if (root !== '' && rel !== '') {
+              const gate = await service.gate(root)
+              if (gate.ok) {
+                const candidate = isAbsolute(rel) ? rel : resolve(gate.canonical, rel)
+                const inside = isPathInside(gate.canonical, candidate)
+                const video = /\.(mp4|webm|mov|m4v)$/i.test(candidate)
+                if (inside && video) file = candidate
+              }
+            }
+          }
+          if (file === null) {
             res.writeHead(404)
             res.end()
             return
@@ -311,6 +326,7 @@ export function registerManimRoutes(
         json(res, {
           ok: true,
           value: {
+          videos: await service.scanVideos(gate.canonical),
             root: gate.canonical,
             scenes,
             jobs: engine.list().filter((job) => job.root === gate.canonical).map(jobView),
@@ -520,8 +536,12 @@ export function registerManimRoutes(
         return
       }
       case '/dsh-manim/session-root': {
-        const sessionId = (payload as { sessionId?: unknown }).sessionId
-        const path = typeof sessionId === 'string' ? findWorkspaceRootForSession(ctx, sessionId) : null
+        const { sessionId, cwd } = payload as { sessionId?: unknown; cwd?: unknown }
+        const path = findWorkspaceRootForSession(
+          ctx,
+          typeof sessionId === 'string' ? sessionId : '',
+          typeof cwd === 'string' ? cwd : undefined,
+        )
         json(res, { ok: true, value: { path } })
         return
       }

@@ -38,11 +38,19 @@ function FallbackGlyph({ className }: GlyphProps): JSX.Element {
 /** Names this build had to substitute, reported once through the panel's log. */
 export const MISSING_ICONS: string[] = []
 
+/** Is this export renderable? `forwardRef`/`memo` components are objects, not functions. */
+function renderable(value: unknown): boolean {
+  if (typeof value === 'function') return true
+  if (value === null || typeof value !== 'object') return false
+  const tag = (value as { $$typeof?: unknown }).$$typeof
+  return typeof tag === 'symbol' || typeof tag === 'number' || tag !== undefined
+}
+
 /** Resolve the first spelling this build actually exports. */
 function candidate(names: readonly string[]): ComponentType<GlyphProps> {
   for (const name of names) {
     const value = TABLE[name]
-    if (typeof value === 'function' || (value !== null && typeof value === 'object')) {
+    if (renderable(value)) {
       return value as ComponentType<GlyphProps>
     }
   }
@@ -119,10 +127,8 @@ function PlainMenu({ anchor }: ShellMenuProps): JSX.Element {
 
 /** The shell's Button, or a plain one. */
 export const ShellButton: ComponentType<ShellButtonProps> =
-  typeof TABLE.Button === 'function' ? (TABLE.Button as ComponentType<ShellButtonProps>) : PlainButton
+  renderable(TABLE.Button) ? (TABLE.Button as ComponentType<ShellButtonProps>) : PlainButton
 
 /** The shell's Menu, or just its trigger. */
 export const ShellMenu: ComponentType<ShellMenuProps> =
-  (typeof TABLE.Menu === 'function' || (TABLE.Menu !== null && typeof TABLE.Menu === 'object'))
-    ? (TABLE.Menu as ComponentType<ShellMenuProps>)
-    : PlainMenu
+  renderable(TABLE.Menu) ? (TABLE.Menu as ComponentType<ShellMenuProps>) : PlainMenu

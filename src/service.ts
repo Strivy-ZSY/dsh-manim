@@ -25,7 +25,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { appendFile, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -134,7 +134,17 @@ function workspaceRows(ctx: Context): Array<Record<string, unknown>> {
  * @param sessionId - the session whose directory is wanted.
  * @returns the root path, or `null` when no workspace claims that session.
  */
-export function findWorkspaceRootForSession(ctx: Context, sessionId: string): string | null {
+export function findWorkspaceRootForSession(ctx: Context, sessionId: string, cwd?: string): string | null {
+  // The client's own `cwd` is a valid answer when the registry cannot map the id:
+  // validate it against the registered roots rather than trusting it outright.
+  if (typeof cwd === 'string' && cwd !== '') {
+    const canonical = (() => { try { return realpathSync(cwd) } catch { return '' } })()
+    if (canonical !== '') {
+      for (const row of workspaceRows(ctx)) {
+        if (typeof row.path === 'string' && isPathInside(row.path, canonical)) return row.path
+      }
+    }
+  }
   if (typeof sessionId !== 'string' || sessionId === '') return null
   const direct = (ctx as unknown as { workspaceRegistry?: { sessionPath?: (id: string) => unknown } })
     .workspaceRegistry?.sessionPath?.(sessionId)
@@ -959,6 +969,39 @@ export class ManimService {
   // --- runtime probe -----------------------------------------------------
 
   /** Whether the bundled runtime is usable, cached for a minute. */
+  /**
+   * Finished films sitting in the workspace, whether or not this plugin made them.
+   *
+   * The render index only knows about jobs *this* installation ran. A workspace
+   * that already contains `animations/*.mp4` — produced by another DSH home, a
+   * previous install, or by hand — is exactly what a user expects to find in the
+   * 文件 menu, so the list is built from the disk, not from the index.
+   *
+   * @param root - the canonical workspace root.
+   * @returns films newest first.
+   */
+  async scanVideos(root: string): Promise<Array<{ rel: string; name: string; at: number; size: number }>> {
+    const dir = join(root, this.config.outputDir)
+    let names: string[]
+    try {
+      names = (await readdir(dir)).filter((name) => /\.(mp4|webm|mov|m4v)$/i.test(name))
+    } catch {
+      return []
+    }
+    const found: Array<{ rel: string; name: string; at: number; size: number }> = []
+    for (const name of names) {
+      const abs = join(dir, name)
+      try {
+        const info = await stat(abs)
+        if (!info.isFile()) continue
+        found.push({ rel: `${this.config.outputDir}/${name}`, name, at: info.mtimeMs, size: info.size })
+      } catch {
+        // A file that vanished between readdir and stat is simply not listed.
+      }
+    }
+    return found.sort((a, b) => b.at - a.at)
+  }
+
   /**
    * Append a browser-side failure to a file next to the render cache.
    *

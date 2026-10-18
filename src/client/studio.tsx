@@ -45,6 +45,7 @@ import {
 } from './icons.tsx'
 import type { Frame } from '../engine.ts'
 import type { RenderRecord, SceneEntry } from '../service.ts'
+import { detectedWorkspaceRoot, subscribeWorkspaceRoot } from './workspace-root.ts'
 import { ManimApiError, type JobView, type ListResult, type QualityOption, type StudioRemote, type WorkspaceRoot } from './api.ts'
 import { formatDuration, t } from './i18n.ts'
 import styles from './studio.module.css'
@@ -196,6 +197,13 @@ function useSession(sessions: SessionListStore | undefined): { root: string; id:
   return state
 }
 
+/** The platform-reported workspace root ('' when the shell has no such service). */
+function useDetectedRoot(): string {
+  const [root, setRoot] = useState<string>(() => detectedWorkspaceRoot())
+  useEffect(() => subscribeWorkspaceRoot(() => setRoot(detectedWorkspaceRoot())), [])
+  return root
+}
+
 /** One row of the scene list. */
 function SceneRow({
   entry,
@@ -246,6 +254,12 @@ export interface StudioViewProps {
   videoUrl: string | null
   onSeek: (time: number) => void
   videoRef: RefObject<HTMLVideoElement | null>
+  /** The film the user picked off disk, if any (a file, not an indexed render). */
+  videoFile?: string
+  /** Pick a film off disk. */
+  onSelectVideo?: (rel: string) => void
+  /** A blocking reason the renderer cannot run yet, already localised. */
+  runtimeHint?: string
 }
 
 /**
@@ -259,6 +273,7 @@ export function StudioView(props: StudioViewProps): JSX.Element {
     data, selected, sceneClass, quality, job, frames, error, busy, showLog,
     onSelect, onSceneClass, onQuality, onRender, onCancel, onRefresh, onStoryboard,
     onNewScene, onToggleLog, frameUrl, videoUrl, onSeek, videoRef,
+    videoFile, onSelectVideo, runtimeHint,
   } = props
 
   const entry = data?.scenes.find((scene) => scene.path === selected) ?? null
@@ -285,6 +300,8 @@ export function StudioView(props: StudioViewProps): JSX.Element {
         .sort((a, b) => b.render.at - a.render.at),
     [data],
   )
+  /** Films the workspace already holds, indexed or not. */
+  const diskVideos = data?.videos ?? []
   const currentRenderKey =
     entry === null || activeQuality === undefined
       ? ''
@@ -329,6 +346,9 @@ export function StudioView(props: StudioViewProps): JSX.Element {
   return (
     <div className={cx('studio')} data-dsh-manim-pane="">
       {data === null && error === null ? <div className={cx('notice')}>{t('panel.loading')}</div> : null}
+      {runtimeHint !== undefined && runtimeHint !== ''
+        ? <div className={cx('error')}>{runtimeHint}</div>
+        : null}
 
       {/* toolbar — every control here is a shell primitive, so the panel wears
           the same capsule geometry, focus ring and hover as the panes next to
@@ -349,22 +369,46 @@ export function StudioView(props: StudioViewProps): JSX.Element {
             </Button>
           }
           items={
-            renders.length === 0
+            renders.length === 0 && diskVideos.length === 0
               ? [{ type: 'label', text: t('files.empty') } as const]
               : [
-                  { type: 'label', text: t('files.title') } as const,
-                  ...renders.map(({ render, rel }) => ({
-                    id: `${render.sceneFile}|${render.quality}|${render.scene}`,
-                    label: `${render.scene} · ${render.quality} · ${formatDuration(render.duration)}`,
-                    // The scene file is what disambiguates two scenes that share
-                    // a class name, and it is what the user recognises.
-                    description: rel,
-                  })),
+                  ...(renders.length === 0
+                    ? []
+                    : [
+                        { type: 'label', text: t('files.title') } as const,
+                        ...renders.map(({ render, rel }) => ({
+                          id: `${render.sceneFile}|${render.quality}|${render.scene}`,
+                          label: `${render.scene} · ${render.quality} · ${formatDuration(render.duration)}`,
+                          // The scene file is what disambiguates two scenes that
+                          // share a class name, and what the user recognises.
+                          description: rel,
+                        })),
+                      ]),
+                  // Films that exist on disk but were not rendered by this
+                  // installation (another DSH home, an earlier install, a hand
+                  // export). Without these the menu claims "no finished film"
+                  // over a workspace full of them.
+                  ...(diskVideos.length === 0
+                    ? []
+                    : [
+                        { type: 'label', text: t('files.onDisk') } as const,
+                        ...diskVideos.map((video) => ({
+                          id: `file:${video.rel}`,
+                          label: video.name,
+                          description: video.rel,
+                        })),
+                      ]),
                 ]
           }
-          selectedId={currentRenderKey}
+          selectedId={videoFile !== undefined && videoFile !== '' ? `file:${videoFile}` : currentRenderKey}
           onSelect={(id) => {
-            const [sceneFile, qualityId, sceneName] = String(id).split('|')
+            const raw = String(id)
+            if (raw.startsWith('file:')) {
+              onSelectVideo?.(raw.slice('file:'.length))
+              setFileOpen(false)
+              return
+            }
+            const [sceneFile, qualityId, sceneName] = raw.split('|')
             if (sceneFile !== undefined && sceneFile !== '') onSelect(sceneFile)
             if (sceneName !== undefined && sceneName !== '') onSceneClass(sceneName)
             if (qualityId !== undefined && qualityId !== '') onQuality(qualityId)
@@ -600,7 +644,11 @@ export interface StudioProps {
  */
 export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   const session = useSession(sessions)
-  const sessionRoot = session.root
+  // The shell's own selection first: it is the workspace the user is *in*, and
+  // asking them to pick one when the answer is already known is the bug this
+  // ordering fixes.
+  const detected = useDetectedRoot()
+  const sessionRoot = detected !== '' ? detected : session.root
   const [picked, setPicked] = useState<string>(chosenRoot)
   const [roots, setRoots] = useState<WorkspaceRoot[] | null>(null)
   const root = sessionRoot !== '' ? sessionRoot : picked
@@ -620,7 +668,7 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
       // asking. The list entry's `cwd` is optional, which is why this exists.
       if (session.id !== '') {
         try {
-          const resolved = await api.sessionRoot(session.id)
+          const resolved = await api.sessionRoot(session.id, session.root)
           if (live && typeof resolved.path === 'string' && resolved.path !== '') {
             chosenRoot = resolved.path
             setPicked(resolved.path)
@@ -656,6 +704,10 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [showLog, setShowLog] = useState(false)
+  /** The film picked off disk (a file, not an indexed render). */
+  const [videoFile, setVideoFile] = useState('')
+  /** Why the renderer cannot run yet, in the user's language. */
+  const [runtimeHint, setRuntimeHint] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
   /** Job id whose index refresh has already been requested, so the poll cannot loop. */
   const refreshedFor = useRef<string>('')
@@ -669,6 +721,21 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   const framesKey = useRef<string>('')
 
   // --- data -----------------------------------------------------------------
+
+  // The renderer lives in a venv the plugin builds itself, and an installed copy
+  // has none until `setup-runtime.mjs` runs. Saying so beats a bare
+  // `spawn …python.exe ENOENT` after the user waits for a render.
+  useEffect(() => {
+    if (api === null) return
+    let live = true
+    void api.probe({})
+      .then((value) => {
+        if (!live) return
+        setRuntimeHint(value.pythonPresent === true ? '' : t('runtime.missing'))
+      })
+      .catch(() => { if (live) setRuntimeHint('') })
+    return () => { live = false }
+  }, [api])
 
   const load = useCallback(
     async (refresh = false) => {
@@ -734,9 +801,11 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   const videoUrl = useMemo(() => {
     if (api === null) return null
     if (liveJob !== null && liveJob.state === 'done' && liveJob.result !== null) return api.videoUrl({ id: liveJob.id })
+    // An explicit pick off disk wins over the index: the user asked for that file.
+    if (videoFile !== '') return api.videoUrl({ file: videoFile })
     if (record !== undefined) return api.videoUrl({ path: record.sceneFile, scene: record.scene, quality: record.quality })
     return null
-  }, [api, liveJob, record])
+  }, [api, liveJob, record, videoFile])
 
   // --- remember -------------------------------------------------------------
 
@@ -997,6 +1066,9 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
       videoUrl={videoUrl}
       onSeek={seek}
       videoRef={videoRef}
+      videoFile={videoFile}
+      onSelectVideo={(rel) => setVideoFile(rel)}
+      runtimeHint={runtimeHint}
     />
   )
 }
