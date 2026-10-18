@@ -249,6 +249,7 @@ node tools/check-panel-markup.mjs    # 把面板 view 渲染成 HTML 串断言�
 | `npm install` 之后 `node_modules` 几乎是空的 | 你的 npm 配置了 `omit=dev`，改用 `npm install --include=dev` |
 | 渲染报 `latex error converting to dvi` | 场景里用了 `MathTex`/`Tex` 而机器没有可用 LaTeX ⇒ 改用 `manimkit.mathtex()` |
 | 加旁白报 pydub/ffmpeg 相关错误 | `add_sound` 只吃 **WAV**；`manim_voice` 产出的就是 WAV，自己塞 mp3 需先转 |
+| 公式渲染报 PIL / Pillow 相关错 | Pillow 13 会破坏 manim 0.22 的 `ImageMobject` 路径。跑 `node runtime/setup-runtime.mjs --repair` 把依赖拉回钉住的版本（`pillow>=11,<13`），**不要**手工 `pip install` |
 | 成片结尾旁白被切掉 | manim 混流用 `shortest=1`；驱动会比对音视频时长并告警，把画面加长或旁白缩短 |
 | 面板一片空白 | 先 `npm run build`（`lib/` 是构建产物），再确认宿主加载的是 `lib/index.js` |
 

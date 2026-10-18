@@ -24,6 +24,12 @@ export interface QualityOption {
   fps: number
 }
 
+/** One registered workspace root. */
+export interface WorkspaceRoot {
+  path: string
+  name: string
+}
+
 /** What `/list` answers with. */
 export interface ListResult {
   root: string
@@ -87,6 +93,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 /** The studio's host face. */
 export interface StudioRemote {
+  /** The host's registered workspace roots — the fallback when the session has no cwd. */
+  workspaces: () => Promise<{ roots: WorkspaceRoot[] }>
   list: (request: { root: string; refresh?: boolean }) => Promise<ListResult>
   inspect: (request: { root: string; path: string }) => Promise<InspectResult>
   render: (request: { root: string; path: string; scene?: string; quality?: string }) => Promise<{ job: JobView }>
@@ -114,6 +122,10 @@ export interface StudioRemote {
 export class StudioApi implements StudioRemote {
   /** @param root - the workspace root (session cwd) every call is bound to. */
   constructor(private readonly root: string) {}
+
+  workspaces(): Promise<{ roots: WorkspaceRoot[] }> {
+    return post<{ roots: WorkspaceRoot[] }>('/dsh-manim/workspaces', {})
+  }
 
   list(request: { root: string; refresh?: boolean }): Promise<ListResult> {
     return post<ListResult>('/dsh-manim/list', { root: this.root, refresh: request.refresh === true })

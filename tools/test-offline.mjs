@@ -232,6 +232,15 @@ const post = async (route, body) => {
   return { status: response.status, body: await response.json() }
 }
 
+// The panel falls back to this when the shell's session store carries no cwd —
+// a shell without `byId[current].cwd` used to render "no workspace" over an
+// open project, so the host answer is what the panel needs to reach.
+const rootsResponse = await post('/dsh-manim/workspaces', {})
+check('POST /workspaces lists the registered roots',
+  Array.isArray(rootsResponse.body.value?.roots)
+  && rootsResponse.body.value.roots.some((entry) => entry.path !== ''),
+  JSON.stringify(rootsResponse.body).slice(0, 160))
+
 const listResponse = await post('/dsh-manim/list', { root: workspace })
 check('POST /list answers the envelope', listResponse.body.ok === true, JSON.stringify(listResponse.body).slice(0, 200))
 check('POST /list returns the scanned scene', listResponse.body.value?.scenes?.some((entry) => entry.rel === 'animations/offline_demo.py') === true)

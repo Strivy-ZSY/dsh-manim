@@ -45,7 +45,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Frame } from '../engine.ts'
 import type { RenderRecord, SceneEntry } from '../service.ts'
-import { ManimApiError, type JobView, type ListResult, type QualityOption, type StudioRemote } from './api.ts'
+import { ManimApiError, type JobView, type ListResult, type QualityOption, type StudioRemote, type WorkspaceRoot } from './api.ts'
 import { formatDuration, t } from './i18n.ts'
 import styles from './studio.module.css'
 
@@ -83,6 +83,14 @@ interface StudioMemory {
 const MEMORY = new Map<string, StudioMemory>()
 const MEMORY_LIMIT = 6
 
+/**
+ * The workspace the user picked when the session carried no cwd.
+ *
+ * Module scope, not component state: the shell unmounts a panel when its tab is
+ * closed, and re-opening the tab should not ask again.
+ */
+let chosenRoot = ''
+
 /** Read (or create) the remembered state for a workspace. */
 function memoryFor(root: string): StudioMemory {
   const existing = MEMORY.get(root)
@@ -96,22 +104,66 @@ function memoryFor(root: string): StudioMemory {
   return fresh
 }
 
-/** The current session's cwd. */
-function currentRoot(sessions: SessionListStore): string {
+/**
+ * The current session's cwd, read defensively.
+ *
+ * `ctx.sessions.list` is not one shape across shells: the official desktop shell
+ * and other shells expose the same idea under different field names, and a panel
+ * that only understands one of them shows "no workspace" while a project is open.
+ * Every known spelling is tried, and an unrecognised one returns '' — the caller
+ * then falls back to the host's registered roots rather than guessing.
+ */
+function currentRoot(sessions: SessionListStore | undefined): string {
+  if (sessions === undefined || typeof sessions.getSnapshot !== 'function') return ''
+  let snapshot: unknown
   try {
-    const snapshot = sessions.getSnapshot()
-    const id = snapshot.current
-    const cwd = id === undefined ? undefined : snapshot.byId[id]?.cwd
-    return typeof cwd === 'string' && cwd !== '' ? cwd : ''
+    snapshot = sessions.getSnapshot()
   } catch {
     return ''
   }
+  if (snapshot === null || typeof snapshot !== 'object') return ''
+  const view = snapshot as Record<string, unknown>
+  const pick = (value: unknown): string => (typeof value === 'string' && value !== '' ? value : '')
+
+  // The current session object may itself be the snapshot's `current`.
+  const current = view.current ?? view.currentId ?? view.activeId ?? view.active
+  if (current !== null && typeof current === 'object') {
+    const direct = pick((current as Record<string, unknown>).cwd)
+    if (direct !== '') return direct
+  }
+  const id = typeof current === 'string' ? current : ''
+
+  const byId = view.byId ?? view.sessions ?? view.items
+  const fromMap = (): string => {
+    if (byId === null || byId === undefined) return ''
+    if (Array.isArray(byId)) {
+      const hit = byId.find((row) => row !== null && typeof row === 'object'
+        && pick((row as Record<string, unknown>).id ?? (row as Record<string, unknown>).sessionId) === id)
+      return hit === undefined ? '' : pick((hit as Record<string, unknown>).cwd)
+    }
+    if (typeof byId !== 'object') return ''
+    const hit = (byId as Record<string, unknown>)[id]
+    if (hit !== null && typeof hit === 'object') return pick((hit as Record<string, unknown>).cwd)
+    return ''
+  }
+  const mapped = fromMap()
+  if (mapped !== '') return mapped
+
+  // No usable current session: a single entry is unambiguous.
+  const rows = Array.isArray(byId) ? byId : byId !== null && typeof byId === 'object' ? Object.values(byId as Record<string, unknown>) : []
+  const cwds = rows
+    .map((row) => (row !== null && typeof row === 'object' ? pick((row as Record<string, unknown>).cwd) : ''))
+    .filter((cwd) => cwd !== '')
+  return cwds.length === 1 ? cwds[0] : ''
 }
 
 /** Subscribe the workspace root to the session store ('' when none). */
-function useRoot(sessions: SessionListStore): string {
+function useRoot(sessions: SessionListStore | undefined): string {
   const [root, setRoot] = useState<string>(() => currentRoot(sessions))
-  useEffect(() => sessions.subscribe(() => setRoot(currentRoot(sessions))), [sessions])
+  useEffect(() => {
+    if (sessions === undefined || typeof sessions.subscribe !== 'function') return
+    return sessions.subscribe(() => setRoot(currentRoot(sessions)))
+  }, [sessions])
   return root
 }
 
@@ -518,8 +570,32 @@ export interface StudioProps {
  * @returns the panel element.
  */
 export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
-  const root = useRoot(sessions)
+  const sessionRoot = useRoot(sessions)
+  const [picked, setPicked] = useState<string>(chosenRoot)
+  const [roots, setRoots] = useState<WorkspaceRoot[] | null>(null)
+  const root = sessionRoot !== '' ? sessionRoot : picked
   const api = useMemo(() => (root === '' ? null : makeApi(root)), [makeApi, root])
+
+  // The session list is not the only place a cwd can come from: shells differ in
+  // what `ctx.sessions.list` exposes, and one that omits `byId[current].cwd`
+  // rendered "no workspace" over an open project. Ask the host, which knows its
+  // registered workspaces, and auto-pick when there is exactly one.
+  useEffect(() => {
+    if (sessionRoot !== '' || picked !== '') return
+    let live = true
+    void makeApi('').workspaces()
+      .then((value) => {
+        if (!live) return
+        const list = value.roots ?? []
+        setRoots(list)
+        if (list.length === 1) {
+          chosenRoot = list[0].path
+          setPicked(list[0].path)
+        }
+      })
+      .catch(() => { if (live) setRoots([]) })
+    return () => { live = false }
+  }, [makeApi, sessionRoot, picked])
   const memory = useMemo(() => memoryFor(root), [root])
 
   const [data, setData] = useState<ListResult | null>(null)
@@ -822,6 +898,28 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   // --- render ---------------------------------------------------------------
 
   if (root === '') {
+    const candidates = roots ?? []
+    if (candidates.length > 1) {
+      return (
+        <div className={cx('notice')}>
+          <p>{t('panel.pickRoot')}</p>
+          {candidates.map((candidate) => (
+            <p key={candidate.path}>
+              <button
+                type="button"
+                onClick={() => {
+                  chosenRoot = candidate.path
+                  setPicked(candidate.path)
+                }}
+              >
+                {candidate.name}
+              </button>
+              <span> {candidate.path}</span>
+            </p>
+          ))}
+        </div>
+      )
+    }
     return <div className={cx('notice')}>{t('panel.noRoot')}</div>
   }
 

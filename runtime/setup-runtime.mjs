@@ -48,7 +48,15 @@ const pluginRoot = resolve(runtimeDir, '..')
 const venvDir = join(runtimeDir, 'venv')
 
 /** Pinned so a render that works today still works next month. */
-const REQUIREMENTS = ['manim==0.22.0', 'matplotlib>=3.8']
+const REQUIREMENTS = [
+  'manim==0.22.0',
+  'matplotlib>=3.8',
+  // manim 0.22 declares `pillow>=11` with no upper bound, and the ImageMobject
+  // path it uses for `manimkit.mathtex()` breaks on Pillow 13: a fresh install
+  // would resolve to 13 and fail at the first formula, with a traceback that
+  // points at PIL rather than at the dependency. Pin the range we actually test.
+  'pillow>=11,<13',
+]
 
 /**
  * Optional, and installed separately so a failure is not fatal.
@@ -139,6 +147,10 @@ function verify() {
 const args = process.argv.slice(2)
 const checkOnly = args.includes('--check')
 const force = args.includes('--force')
+// `--repair` re-resolves the pinned set inside the existing venv (a downgrade is
+// the usual reason: Pillow 13 breaks manim 0.22's ImageMobject path). It exists
+// so nobody is tempted to `pip install` by hand into a venv the plugin owns.
+const repair = args.includes('--repair')
 const pythonArg = args.indexOf('--python')
 const explicitPython = pythonArg === -1 ? undefined : args[pythonArg + 1]
 
@@ -151,6 +163,7 @@ if (checkOnly) {
   }
   console.error(`runtime NOT ready: ${status.reason}`)
   console.error(`run: node "${join(runtimeDir, 'setup-runtime.mjs')}"`)
+  console.error(`already installed but broken? node "${join(runtimeDir, 'setup-runtime.mjs')}" --repair`)
   process.exit(1)
 }
 
@@ -184,7 +197,11 @@ console.log('upgrading pip …')
 run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', '-q', '--upgrade', 'pip'])
 
 console.log(`installing ${REQUIREMENTS.join(' ')} … (downloads ~120 MB the first time)`)
-const install = run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', '-q', ...REQUIREMENTS])
+const install = run(python, [
+  '-m', 'pip', 'install', '--disable-pip-version-check', '-q',
+  ...(repair ? ['--upgrade'] : []),
+  ...REQUIREMENTS,
+])
 if (install !== 0) {
   console.error('installing manim failed. If the machine has no direct internet, point pip at a mirror:')
   console.error('  node runtime/setup-runtime.mjs   # after setting PIP_INDEX_URL')

@@ -29,6 +29,7 @@ export const ZH = {
 
   'panel.loading': '正在扫描工作区…',
   'panel.noRoot': '没有可用的工作区，先打开一个会话项目。',
+  'panel.pickRoot': '选一个工作区来放动画：',
   'panel.empty': '工作区里还没有场景文件',
   'panel.emptyHint': '点「新场景」生成一个带主题和字幕的起始场景，然后让 agent 按你要讲的论文/方法改它。',
   'panel.refresh': '刷新',
@@ -109,6 +110,7 @@ export const EN: Record<keyof typeof ZH, string> = {
 
   'panel.loading': 'Scanning the workspace…',
   'panel.noRoot': 'No workspace available — open a session project first.',
+  'panel.pickRoot': 'Pick a workspace for the animations:',
   'panel.empty': 'No scene files in this workspace yet',
   'panel.emptyHint': 'Press "New scene" to scaffold a themed starter, then have the agent adapt it to your paper or method.',
   'panel.refresh': 'Refresh',

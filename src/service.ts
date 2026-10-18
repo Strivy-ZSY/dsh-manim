@@ -84,6 +84,36 @@ export async function verifyWorkspaceRoot(ctx: Context, root: string): Promise<G
   return { ok: false, error: 'path is not inside a registered workspace' }
 }
 
+/**
+ * The registered workspace roots, as the panel needs them.
+ *
+ * The panel used to derive its root from the session list (`ctx.sessions.list`),
+ * and that shape is not the same in every shell: a shell whose snapshot lacks
+ * `byId[current].cwd` renders the "no workspace" notice with a perfectly good
+ * project open. The host knows the truth, so it answers instead.
+ *
+ * @param ctx - context carrying the workspace registry.
+ * @returns roots newest-first; an unreadable registry yields an empty list.
+ */
+export function listWorkspaceRoots(ctx: Context): Array<{ path: string; name: string }> {
+  let rows: unknown
+  try {
+    rows = (ctx as unknown as { workspaceRegistry?: { list?: () => unknown } }).workspaceRegistry?.list?.()
+  } catch {
+    return []
+  }
+  if (!Array.isArray(rows)) return []
+  const roots: Array<{ path: string; name: string }> = []
+  for (const row of rows) {
+    const record = row as Record<string, unknown>
+    const path = [record.path, record.root, record.directory].find((value) => typeof value === 'string' && value !== '')
+    if (typeof path !== 'string') continue
+    const name = typeof record.name === 'string' && record.name !== '' ? record.name : basename(path)
+    roots.push({ path, name })
+  }
+  return roots
+}
+
 /** Canonicalize a file and require it to be inside some registered workspace. */
 export async function verifyPathInSomeWorkspace(ctx: Context, target: string): Promise<GateVerdict> {
   if (typeof target !== 'string' || target === '') return { ok: false, error: 'empty path' }
@@ -909,7 +939,13 @@ export class ManimService {
       pluginRoot: PLUGIN_ROOT,
     }
     if (!base.pythonPresent) {
-      const value = { ok: false, ...base, error: '运行时还没装好：先跑 node runtime/setup-runtime.mjs' }
+      const value = {
+        ok: false,
+        ...base,
+        error: '运行时还没装好：跑 node runtime/setup-runtime.mjs 建它。'
+          + '如果已经装过但公式/渲染报依赖错，跑 node runtime/setup-runtime.mjs --repair。'
+          + '不要直接往这个 venv 里 pip install —— 钉住的版本写在那个脚本里。',
+      }
       this.probeCache = { at: Date.now(), value }
       return value
     }
