@@ -1055,38 +1055,105 @@ export class ManimService {
     return found.sort((a, b) => b.at - a.at)
   }
 
+  /** Live state of the renderer installation, one at a time. */
+  private setupJob: {
+    id: string
+    startedAt: number
+    phase: string
+    collected: number
+    percent: number
+    tail: string
+    running: boolean
+    ok: boolean
+    error: string
+  } | null = null
+
   /**
-   * Build the render runtime on the user's behalf.
+   * Start building the render runtime, reporting progress as it goes.
    *
-   * The venv is ~500 MB of Python and cannot be produced at install time (a
-   * package install must not run a long download, and pnpm would gate a build
-   * script anyway). Doing it from a button here is the difference between "read
-   * this command and go find the install directory" and "click 搭建运行时".
+   * The venv is ~500 MB of Python, so a click that appears to do nothing for ten
+   * minutes is indistinguishable from a hang. The host parses pip's own output
+   * for the stage and the number of packages resolved, and the panel renders a
+   * bar from it.
    *
-   * @returns the tail of the run and a fresh probe.
+   * The venv is built into `config.runtimeDir`, which lives *outside* the package
+   * when the plugin is installed as a dependency — reinstalling the plugin must
+   * not throw the renderer away.
+   *
+   * @returns the job id the panel polls.
    */
-  async setupRuntime(): Promise<{ ok: boolean; code: number; output: string; probe: Record<string, unknown> }> {
+  async startRuntimeSetup(): Promise<{ id: string }> {
+    if (this.setupJob?.running === true) return { id: this.setupJob.id }
     const script = join(PLUGIN_ROOT, 'runtime', 'setup-runtime.mjs')
-    if (!existsSync(script)) {
-      return { ok: false, code: -1, output: `missing ${script}`, probe: await this.probe(true) }
+    const venv = join(this.config.runtimeDir, 'venv')
+    const job = {
+      id: randomUUID(),
+      startedAt: Date.now(),
+      phase: '准备',
+      collected: 0,
+      percent: 2,
+      tail: '',
+      running: true,
+      ok: false,
+      error: '',
     }
-    const output = await new Promise<string>((resolve) => {
-      const child = spawn(process.execPath, [script], { cwd: PLUGIN_ROOT, windowsHide: true })
-      let buffer = ''
-      const collect = (chunk: unknown): void => {
-        buffer += String(chunk)
-        if (buffer.length > 8000) buffer = buffer.slice(-8000)
+    this.setupJob = job
+    if (!existsSync(script)) {
+      Object.assign(job, { running: false, phase: '失败', error: `missing ${script}`, percent: 100 })
+      return { id: job.id }
+    }
+    const child = spawn(process.execPath, [script, '--venv', venv], { cwd: PLUGIN_ROOT, windowsHide: true })
+    const feed = (chunk: unknown): void => {
+      const text = String(chunk)
+      job.tail = (job.tail + text).slice(-2000)
+      for (const line of text.split(String.fromCharCode(10))) {
+        if (/^Collecting /i.test(line)) {
+          job.collected += 1
+          job.phase = '下载依赖'
+          job.percent = Math.min(85, 5 + job.collected * 2)
+        } else if (/Installing collected packages/i.test(line)) {
+          job.phase = '安装依赖'
+          job.percent = Math.max(job.percent, 90)
+        } else if (/Successfully installed/i.test(line)) {
+          job.phase = '完成'
+          job.percent = 99
+        }
       }
-      child.stdout?.on('data', collect)
-      child.stderr?.on('data', collect)
-      const timer = setTimeout(() => { try { child.kill() } catch { /* already gone */ } }, 30 * 60 * 1000)
-      child.on('close', (code) => { clearTimeout(timer); resolve(`${buffer}
-[exit ${String(code)}]`) })
-      child.on('error', (error) => { clearTimeout(timer); resolve(`${buffer}
-[spawn error] ${error.message}`) })
+    }
+    child.stdout?.on('data', feed)
+    child.stderr?.on('data', feed)
+    const timer = setTimeout(() => { try { child.kill() } catch { /* already gone */ } }, 40 * 60 * 1000)
+    await new Promise<void>((resolve) => {
+      child.on('close', () => { clearTimeout(timer); resolve() })
+      child.on('error', (error) => {
+        clearTimeout(timer)
+        job.error = error.message
+        resolve()
+      })
     })
     const probe = await this.probe(true)
-    return { ok: probe.pythonPresent === true, code: probe.pythonPresent === true ? 0 : 1, output, probe }
+    job.running = false
+    job.percent = 100
+    job.ok = probe.pythonPresent === true
+    job.phase = job.ok ? '完成' : '失败'
+    if (!job.ok && job.error === '') job.error = String(probe.error ?? '运行时装不上')
+    return { id: job.id }
+  }
+
+  /** The current renderer-install job, for the panel's progress bar. */
+  runtimeSetupStatus(): Record<string, unknown> {
+    const job = this.setupJob
+    if (job === null) return { state: 'idle' }
+    return {
+      state: job.running ? 'running' : job.ok ? 'done' : 'failed',
+      phase: job.phase,
+      percent: job.percent,
+      collected: job.collected,
+      elapsedMs: Date.now() - job.startedAt,
+      tail: job.tail.slice(-600),
+      error: job.error,
+      venvDir: join(this.config.runtimeDir, 'venv'),
+    }
   }
 
   /**
@@ -1132,7 +1199,8 @@ export class ManimService {
       pluginRoot: PLUGIN_ROOT,
       // Shown in the panel so a user who uninstalls knows what to delete: the
       // renderer (~500 MB) and the render cache both live outside the workspace.
-      venvDir: dirname(this.config.pythonPath),
+      venvDir: join(this.config.runtimeDir, 'venv'),
+      runtimeDir: this.config.runtimeDir,
     }
     if (!base.pythonPresent) {
       const value = {

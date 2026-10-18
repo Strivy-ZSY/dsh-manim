@@ -67,6 +67,8 @@ export interface Config {
   voicePath: string
   /** Root of the media cache (renders, manim's internal caches, stills). */
   cacheDir: string
+  /** Directory holding the renderer venv (outside the package when installed). */
+  runtimeDir: string
   /**
    * Workspace-relative directory a finished `.mp4` is copied into.
    * `''` disables the copy and leaves the video in the cache only.
@@ -109,6 +111,7 @@ export interface RawConfig {
   driverPath?: unknown
   voicePath?: unknown
   cacheDir?: unknown
+  runtimeDir?: unknown
   outputDir?: unknown
   background?: unknown
   defaultQuality?: unknown
@@ -126,8 +129,26 @@ export interface RawConfig {
  * PATH (short version: the user's environment is the user's, and installing a
  * renderer into it is not this plugin's business).
  */
+/**
+ * Where the renderer lives: inside the package, on purpose.
+ *
+ * Keeping the venv under `<plugin>/runtime/venv` means uninstalling the plugin
+ * takes the ~500 MB with it — nobody is left hunting a stray directory. The cost
+ * is that reinstalling the plugin also removes it, so the renderer has to be
+ * installed again after an upgrade; that is the trade this plugin makes.
+ *
+ * `config.runtimeDir` can point elsewhere for a machine that wants to share one
+ * environment between installs.
+ *
+ * @returns the directory holding `venv/`.
+ */
+export function defaultRuntimeDir(): string {
+  return join(PLUGIN_ROOT, 'runtime')
+}
+
+/** The interpreter inside `defaultRuntimeDir()`. */
 export function defaultPythonPath(): string {
-  const root = join(PLUGIN_ROOT, 'runtime', 'venv')
+  const root = join(defaultRuntimeDir(), 'venv')
   // Platform decides the layout; existence must not, or a missing venv reports
   // the other platform's path and the "runtime missing" message gets confusing.
   return process.platform === 'win32' ? join(root, 'Scripts', 'python.exe') : join(root, 'bin', 'python')
@@ -152,6 +173,10 @@ export function resolveConfig(raw: RawConfig | undefined): Config {
   return {
     agentTools,
     pythonPath: typeof raw?.pythonPath === 'string' && raw.pythonPath !== '' ? raw.pythonPath : defaultPythonPath(),
+    runtimeDir:
+      typeof raw?.runtimeDir === 'string' && raw.runtimeDir !== ''
+        ? raw.runtimeDir
+        : defaultRuntimeDir(),
     driverPath:
       typeof raw?.driverPath === 'string' && raw.driverPath !== ''
         ? raw.driverPath

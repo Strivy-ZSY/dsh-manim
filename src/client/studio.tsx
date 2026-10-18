@@ -262,8 +262,8 @@ export interface StudioViewProps {
   runtimeHint?: string
   /** Build the runtime now. */
   onSetupRuntime?: () => void
-  /** Where the artifacts live, so uninstalling can clean up. */
-  storage?: { cacheDir: string; venvDir: string }
+  /** Renderer-install progress, when one is running. */
+  setupProgress?: { phase: string; percent: number } | null
 }
 
 /**
@@ -277,7 +277,7 @@ export function StudioView(props: StudioViewProps): JSX.Element {
     data, selected, sceneClass, quality, job, frames, error, busy, showLog,
     onSelect, onSceneClass, onQuality, onRender, onCancel, onRefresh, onStoryboard,
     onNewScene, onToggleLog, frameUrl, videoUrl, onSeek, videoRef,
-    videoFile, onSelectVideo, runtimeHint, onSetupRuntime, storage,
+    videoFile, onSelectVideo, runtimeHint, onSetupRuntime, setupProgress,
   } = props
 
   const entry = data?.scenes.find((scene) => scene.path === selected) ?? null
@@ -350,15 +350,6 @@ export function StudioView(props: StudioViewProps): JSX.Element {
   return (
     <div className={cx('studio')} data-dsh-manim-pane="">
       {data === null && error === null ? <div className={cx('notice')}>{t('panel.loading')}</div> : null}
-      {storage === undefined ? null : (
-        <p className={cx('muted', 'small')}>
-          {t('storage.line', {
-            cache: storage.cacheDir,
-            venv: storage.venvDir,
-            out: `${data?.root ?? ''}/${data?.outputDir ?? 'animations'}`,
-          })}
-        </p>
-      )}
       {runtimeHint !== undefined && runtimeHint !== ''
         ? (
             <div className={cx('error')}>
@@ -367,6 +358,20 @@ export function StudioView(props: StudioViewProps): JSX.Element {
                 <Button size="sm" variant="primary" disabled={busy} onClick={onSetupRuntime}>
                   {t('runtime.setup')}
                 </Button>
+              )}
+              {setupProgress === undefined || setupProgress === null ? null : (
+                <>
+                  <div className={cx('bar')}>
+                    <div
+                      className={cx('barFill')}
+                      style={{ width: `${Math.max(1, Math.min(100, setupProgress.percent))}%` }}
+                      data-dsh-manim-setup-bar={String(setupProgress.percent)}
+                    />
+                  </div>
+                  <span className={cx('small')}>
+                    {`${setupProgress.phase} ${setupProgress.percent}%`}
+                  </span>
+                </>
               )}
             </div>
           )
@@ -738,8 +743,8 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   const [runtimeHint, setRuntimeHint] = useState('')
   /** A runtime build is running right now. */
   const [setupBusy, setSetupBusy] = useState(false)
-  /** Paths worth telling the user about when they uninstall. */
-  const [runtimePaths, setRuntimePaths] = useState<{ cacheDir: string; venvDir: string } | undefined>(undefined)
+  /** How far the renderer installation has got, for the bar. */
+  const [setupProgress, setSetupProgress] = useState<{ phase: string; percent: number } | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   /** Job id whose index refresh has already been requested, so the poll cannot loop. */
   const refreshedFor = useRef<string>('')
@@ -754,19 +759,39 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
 
   // --- data -----------------------------------------------------------------
 
-  /** Build the venv, then re-check so the banner disappears on success. */
+  /**
+   * Build the venv, polling the host for progress.
+   *
+   * A 500 MB pip install reports nothing on its own; the host parses pip's output
+   * into a phase and a percentage, and this loop paints it. The panel would
+   * otherwise look frozen for ten minutes.
+   */
   const setupRuntime = useCallback(async (): Promise<void> => {
     if (api === null || setupBusy) return
     setSetupBusy(true)
-    setRuntimeHint(t('runtime.building'))
+    setSetupProgress({ phase: t('runtime.phase.preparing'), percent: 0 })
     try {
-      const result = await api.setupRuntime()
-      const probe = result.probe ?? {}
-      setRuntimeHint(probe.pythonPresent === true ? '' : t('runtime.missing'))
+      await api.setupRuntime()
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 900))
+        const status = await api.setupStatus()
+        if (status.state === 'running') {
+          setSetupProgress({ phase: status.phase ?? '', percent: Math.max(1, Math.round(status.percent ?? 0)) })
+          continue
+        }
+        setSetupProgress({ phase: status.phase ?? '', percent: 100 })
+        if (status.state === 'done') {
+          setRuntimeHint('')
+        } else {
+          setRuntimeHint(status.error !== undefined && status.error !== '' ? status.error : t('runtime.missing'))
+        }
+        break
+      }
     } catch (failure) {
       setRuntimeHint(failure instanceof Error ? failure.message : String(failure))
     } finally {
       setSetupBusy(false)
+      setSetupProgress(null)
     }
   }, [api, setupBusy])
 
@@ -780,9 +805,6 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
       .then((value) => {
         if (!live) return
         setRuntimeHint(value.pythonPresent === true ? '' : t('runtime.missing'))
-        const cache = typeof value.cacheDir === 'string' ? value.cacheDir : ''
-        const venv = typeof value.venvDir === 'string' ? value.venvDir : ''
-        if (cache !== '' || venv !== '') setRuntimePaths({ cacheDir: cache, venvDir: venv })
       })
       .catch(() => { if (live) setRuntimeHint('') })
     return () => { live = false }
@@ -1122,7 +1144,7 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
       onSelectVideo={(rel) => setVideoFile(rel)}
       runtimeHint={runtimeHint}
       onSetupRuntime={() => void setupRuntime()}
-      storage={runtimePaths}
+      setupProgress={setupProgress}
     />
   )
 }

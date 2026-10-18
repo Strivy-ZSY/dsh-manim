@@ -30,6 +30,18 @@ export interface WorkspaceRoot {
   name: string
 }
 
+/** Progress of the renderer installation, as the panel needs it. */
+export interface RuntimeSetupStatus {
+  state: 'idle' | 'running' | 'done' | 'failed'
+  phase?: string
+  percent?: number
+  collected?: number
+  elapsedMs?: number
+  tail?: string
+  error?: string
+  venvDir?: string
+}
+
 /** A finished film found in the workspace, indexed or not. */
 export interface VideoFile {
   rel: string
@@ -105,8 +117,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 export interface StudioRemote {
   /** The host's registered workspace roots — the fallback when the session has no cwd. */
   workspaces: () => Promise<{ roots: WorkspaceRoot[] }>
-  /** Build the render runtime (venv) on the user's behalf. */
-  setupRuntime: () => Promise<{ ok: boolean; code: number; output: string; probe: Record<string, unknown> }>
+  /** Start building the render runtime (venv); the panel polls its progress. */
+  setupRuntime: () => Promise<{ id: string }>
+  /** Progress of the running (or last) renderer installation. */
+  setupStatus: () => Promise<RuntimeSetupStatus>
   /** The workspace root the given session belongs to, resolved by the host. */
   sessionRoot: (sessionId: string, cwd?: string) => Promise<{ path: string | null }>
   list: (request: { root: string; refresh?: boolean }) => Promise<ListResult>
@@ -141,8 +155,12 @@ export class StudioApi implements StudioRemote {
     return post<{ roots: WorkspaceRoot[] }>('/dsh-manim/workspaces', {})
   }
 
-  setupRuntime(): Promise<{ ok: boolean; code: number; output: string; probe: Record<string, unknown> }> {
-    return post<{ ok: boolean; code: number; output: string; probe: Record<string, unknown> }>('/dsh-manim/runtime/setup', {})
+  setupRuntime(): Promise<{ id: string }> {
+    return post<{ id: string }>('/dsh-manim/runtime/setup', {})
+  }
+
+  setupStatus(): Promise<RuntimeSetupStatus> {
+    return post<RuntimeSetupStatus>('/dsh-manim/runtime/setup-status', {})
   }
 
   sessionRoot(sessionId: string, cwd?: string): Promise<{ path: string | null }> {

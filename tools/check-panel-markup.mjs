@@ -445,6 +445,18 @@ void withDiskVideos
 check('the empty 文件 menu says why', emptyFileMenu.some((item) => typeof item.text === 'string' && item.text !== ''), JSON.stringify(emptyFileMenu).slice(0, 160))
 void noFiles
 
+// The renderer install is a ~500 MB pip run: without a bar the panel looks frozen.
+const installing = render({
+  data,
+  selected: sceneA.path,
+  runtimeHint: '出片要用真正的 Manim 渲染器',
+  onSetupRuntime: () => {},
+  setupProgress: { phase: '下载依赖', percent: 42 },
+})
+check('the renderer install shows a progress bar',
+  /data-dsh-manim-setup-bar="42"/.test(installing) && /下载依赖 42%/.test(installing),
+  installing.slice(0, 300))
+
 // --- layout: picture and storyboard share one stage --------------------------
 const positions = (html) => ({
   stage: html.indexOf('data-dsh-manim-stage'),

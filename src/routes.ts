@@ -524,6 +524,10 @@ export function registerManimRoutes(
         }
         return
       }
+      case '/dsh-manim/runtime/setup-status': {
+        json(res, { ok: true, value: service.runtimeSetupStatus() })
+        return
+      }
       case '/dsh-manim/runtime/setup': {
         // Long-running by nature; the panel shows a busy state while it waits.
         // Every failure must still be a JSON envelope: an unhandled rejection
@@ -531,7 +535,7 @@ export function registerManimRoutes(
         // report "HTTP 400: invalid JSON response" — which says nothing about
         // what actually went wrong.
         try {
-          json(res, { ok: true, value: await service.setupRuntime() })
+          json(res, { ok: true, value: await service.startRuntimeSetup() })
         } catch (error) {
           fail(res, 'failed', error instanceof Error ? error.message : String(error))
         }

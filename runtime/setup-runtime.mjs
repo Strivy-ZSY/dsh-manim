@@ -45,7 +45,11 @@ import { fileURLToPath } from 'node:url'
 
 const runtimeDir = dirname(fileURLToPath(import.meta.url))
 const pluginRoot = resolve(runtimeDir, '..')
-const venvDir = join(runtimeDir, 'venv')
+const args = process.argv.slice(2)
+const venvArg = args.indexOf('--venv')
+// The venv may live outside the package (the host passes its own directory) so a
+// plugin reinstall does not delete ~500 MB of Python. Defaults to alongside.
+const venvDir = venvArg === -1 ? join(runtimeDir, 'venv') : resolve(args[venvArg + 1] ?? '')
 
 /** Pinned so a render that works today still works next month. */
 const REQUIREMENTS = [
@@ -144,7 +148,6 @@ function verify() {
   }
 }
 
-const args = process.argv.slice(2)
 const checkOnly = args.includes('--check')
 const force = args.includes('--force')
 // `--repair` re-resolves the pinned set inside the existing venv (a downgrade is
