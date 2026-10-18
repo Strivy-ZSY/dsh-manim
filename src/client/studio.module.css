@@ -620,3 +620,27 @@
   max-height: 100%;
   background: #000;
 }
+
+/*
+ * Renderer-install bar.
+ *
+ * Deliberately its own class, not the player's `.bar`: that one sits inside the
+ * transport row and collapsed to a few pixels when reused here (a dot instead of
+ * a bar). This one is a block-level track that is always the full width.
+ */
+.setupBar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin: 6px 0 4px;
+  border-radius: 3px;
+  background: var(--dsw-alias-bg-l3, #e5e7eb);
+  overflow: hidden;
+}
+
+.setupBarFill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--dsw-alias-label-primary, #2563eb);
+  transition: width 400ms ease-out;
+}

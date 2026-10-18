@@ -281,6 +281,16 @@ check('pip output is parsed into a phase',
   && mod.parseSetupProgress('Successfully installed manim-0.22.0')?.phase === '完成'
   && mod.parseSetupProgress('  something else') === null)
 
+// The setup script must report its own stages: pip runs quiet, so without these
+// markers the bar sat at "preparing 0%" for the entire install.
+check('the setup script reports stages for the bar',
+  mod.parseSetupProgress('##dsh-manim-progress 20 下载依赖')?.percent === 20
+  && mod.parseSetupProgress('##dsh-manim-progress 100 完成')?.phase === '完成')
+
+const setupSource = readFileSync(path.join(root, 'runtime', 'setup-runtime.mjs'), 'utf8')
+check('setup-runtime actually emits stage markers',
+  (setupSource.match(/stage\(\d+,/g) ?? []).length >= 5)
+
 const listResponse = await post('/dsh-manim/list', { root: workspace })
 check('POST /list answers the envelope', listResponse.body.ok === true, JSON.stringify(listResponse.body).slice(0, 200))
 check('POST /list returns the scanned scene', listResponse.body.value?.scenes?.some((entry) => entry.rel === 'animations/offline_demo.py') === true)

@@ -86,6 +86,14 @@ export interface SetupStep {
  * @returns the step, or `null` for output that carries none.
  */
 export function parseSetupProgress(line: string): SetupStep | null {
+  // The setup script's own stage marker wins: it is the only thing that reports
+  // progress while pip is quiet, and it is what keeps the bar from sitting at
+  // "preparing 0%" for the whole install.
+  const marker = line.match(/##dsh-manim-progress (\d{1,3}) (.+)$/)
+  if (marker !== null) {
+    const percent = Math.max(0, Math.min(100, Number(marker[1])))
+    return { kind: 'installing', phase: marker[2].trim(), percent }
+  }
   if (/^Collecting /i.test(line)) return { kind: 'collecting', phase: '下载依赖', percent: 0 }
   if (/Installing collected packages/i.test(line)) return { kind: 'installing', phase: '安装依赖', percent: 90 }
   if (/Successfully installed/i.test(line)) return { kind: 'installed', phase: '完成', percent: 99 }
@@ -1137,7 +1145,8 @@ export class ManimService {
         if (step.kind === 'collecting') {
           job.collected += 1
           job.phase = step.phase
-          job.percent = Math.min(85, 5 + job.collected * 2)
+          // Between the marker for 20% and the one for 85%, count packages.
+          job.percent = Math.max(job.percent, Math.min(84, 20 + job.collected))
         } else {
           job.phase = step.phase
           job.percent = Math.max(job.percent, step.percent)

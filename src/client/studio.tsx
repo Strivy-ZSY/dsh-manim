@@ -361,9 +361,9 @@ export function StudioView(props: StudioViewProps): JSX.Element {
               )}
               {setupProgress === undefined || setupProgress === null ? null : (
                 <>
-                  <div className={cx('bar')}>
+                  <div className={cx('setupBar')}>
                     <div
-                      className={cx('barFill')}
+                      className={cx('setupBarFill')}
                       style={{ width: `${Math.max(1, Math.min(100, setupProgress.percent))}%` }}
                       data-dsh-manim-setup-bar={String(setupProgress.percent)}
                     />
@@ -776,7 +776,13 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
         await new Promise((resolve) => setTimeout(resolve, 900))
         const status = await api.setupStatus()
         if (status.state === 'running') {
-          setSetupProgress({ phase: status.phase ?? '', percent: Math.max(1, Math.round(status.percent ?? 0)) })
+          setSetupProgress((previous) => {
+            const reported = Math.round(status.percent ?? 0)
+            // Move forward even when the host has nothing new: a 10-minute install
+            // with a still bar reads as a hang, so creep toward 97% between reports.
+            const crept = previous === null ? 1 : Math.min(97, previous.percent + 1)
+            return { phase: status.phase ?? '准备中', percent: Math.max(reported, crept) }
+          })
           continue
         }
         setSetupProgress({ phase: status.phase ?? '', percent: 100 })

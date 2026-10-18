@@ -45,6 +45,17 @@ import { fileURLToPath } from 'node:url'
 
 const runtimeDir = dirname(fileURLToPath(import.meta.url))
 const pluginRoot = resolve(runtimeDir, '..')
+/**
+ * Report a stage for the host's progress bar.
+ *
+ * pip is run with `-q`, so it prints no progress of its own — without these
+ * markers the panel can only sit at "preparing 0%" for the whole ten minutes.
+ *
+ * @param percent - 0..100.
+ * @param label - shown next to the bar.
+ */
+const stage = (percent, label) => console.log(`##dsh-manim-progress ${percent} ${label}`)
+
 const args = process.argv.slice(2)
 const venvArg = args.indexOf('--venv')
 // The venv may live outside the package (the host passes its own directory) so a
@@ -180,6 +191,7 @@ if (force && existsSync(venvDir)) {
 
 if (!existsSync(venvPython())) {
   const base = findBasePython(explicitPython)
+  stage(5, '创建虚拟环境')
   console.log(`creating venv from ${base} …`)
   mkdirSync(runtimeDir, { recursive: true })
   const code = run(base, ['-m', 'venv', venvDir])
@@ -196,12 +208,16 @@ const python = venvPython()
 // Upgrade pip first: an old pip resolves manim's dependency set differently, and
 // the failure that produces ("no matching distribution for X") points nowhere
 // near the cause.
+stage(15, '升级 pip')
 console.log('upgrading pip …')
 run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', '-q', '--upgrade', 'pip'])
 
+stage(20, '下载依赖')
 console.log(`installing ${REQUIREMENTS.join(' ')} … (downloads ~120 MB the first time)`)
+// No `-q` here on purpose: the host's progress bar counts `Collecting …` lines,
+// and a silent pip means a frozen-looking panel.
 const install = run(python, [
-  '-m', 'pip', 'install', '--disable-pip-version-check', '-q',
+  '-m', 'pip', 'install', '--disable-pip-version-check', '--progress-bar', 'off', '--no-input',
   ...(repair ? ['--upgrade'] : []),
   ...REQUIREMENTS,
 ])
@@ -211,6 +227,7 @@ if (install !== 0) {
   process.exit(install)
 }
 
+stage(85, '可选依赖（旁白引擎）')
 console.log(`installing ${OPTIONAL.join(' ')} … (optional: higher-quality narration)`)
 const optional = run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', '-q', ...OPTIONAL])
 if (optional !== 0) {
@@ -218,9 +235,11 @@ if (optional !== 0) {
   console.log("    manim_voice(action='speak', engine='sapi', voice='Microsoft Huihui Desktop')")
 }
 
+stage(92, '写入路径')
 const pth = writePathFile(python)
 console.log(`wrote ${pth}`)
 
+stage(96, '校验')
 const status = verify()
 if (!status.ok) {
   console.error(`\nruntime NOT ready: ${status.reason}`)
@@ -228,6 +247,7 @@ if (!status.ok) {
 }
 
 const info = status.info
+stage(100, '完成')
 console.log('\nmanim runtime ready')
 console.log(`  python   ${info.python}`)
 console.log(`  manim    ${info.manim}`)
