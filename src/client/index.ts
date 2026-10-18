@@ -71,6 +71,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
   ctx.effect(() => ctx.locale.register(NS, { zh: ZH, en: EN }), 'dsh-manim: dictionaries')
   registerManimStudio(ctx, { makeApi, id: MANIM_ID, kind: MANIM_KIND, locale: NS })
   // Rendered .mp4 files are ours, and the shell's own preview set has no video
-  // renderer: without this, clicking one opens an empty tab.
-  registerVideoPreview(ctx)
+  // renderer: without this, clicking one opens an empty tab. A shell without the
+  // document-preview service must not lose the studio over it — activation
+  // failures are fatal to startup (crash-*.log: "dsh-manim: failed").
+  try {
+    registerVideoPreview(ctx)
+  } catch (error) {
+    console.warn('[dsh-manim] video preview skipped:', error)
+  }
 }

@@ -141,7 +141,13 @@ export function registerManimStudio(ctx: ClientContext, seats: StudioSeats): voi
 
   // The tab body. A closure rather than a module-level component so the API
   // binder and the session store ride along.
-  const sessions = ctx.sessions.list as unknown as SessionListStore
+  // Same trap as `documentPreviews`: an uninjected service throws on read.
+  let sessions: SessionListStore | undefined
+  try {
+    sessions = ctx.sessions.list as unknown as SessionListStore
+  } catch {
+    sessions = undefined
+  }
   ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
     name: 'sidebar.right.pane.tab',
     key: id,

@@ -89,12 +89,28 @@ export function VideoBody(props: VideoBodyOwner): JSX.Element {
  * @param ctx - client root context.
  */
 export function registerVideoPreview(ctx: ClientContext): void {
-  const runtime = ctx as unknown as {
+  // Reading an uninjected service off a Cordis context THROWS — it does not
+  // return undefined. A bare `ctx.documentPreviews` on a shell without the
+  // document-preview service therefore fails the whole client activation, which
+  // takes startup down with it (this exact line did exactly that). Every read
+  // and every registration below is inside the guard.
+  let runtime: {
     documentPreviews?: { register?: (definition: Record<string, unknown>) => unknown }
-    slots?: { inject?: unknown; register?: unknown }
+    slots?: { inject?: (...args: unknown[]) => unknown; register?: (...args: unknown[]) => unknown }
     effect?: (fn: () => unknown, label?: string) => unknown
   }
-  const previews = runtime.documentPreviews
+  try {
+    runtime = ctx as unknown as typeof runtime
+  } catch {
+    return
+  }
+  let previews: { register?: (definition: Record<string, unknown>) => unknown } | undefined
+  try {
+    previews = runtime.documentPreviews
+  } catch {
+    // Shell has no document-preview service: nothing to extend, studio still works.
+    return
+  }
   if (previews === undefined || typeof previews.register !== 'function') return
   try {
     previews.register({
@@ -110,13 +126,19 @@ export function registerVideoPreview(ctx: ClientContext): void {
     return
   }
   try {
-    if (typeof runtime.slots?.inject !== 'function' || typeof runtime.slots?.register !== 'function') return
-    const slots = runtime.slots as {
+    let slots: { inject?: unknown; register?: unknown } | undefined
+    try {
+      slots = runtime.slots
+    } catch {
+      return
+    }
+    if (slots === undefined || typeof slots.inject !== 'function' || typeof slots.register !== 'function') return
+    const typed = slots as {
       inject: (name: string, fn: () => unknown) => unknown
       register: (definition: Record<string, unknown>, body: unknown) => unknown
     }
     runtime.effect?.(
-      () => slots.inject('sidebar.right.tab.document', () => slots.register({
+      () => typed.inject('sidebar.right.tab.document', () => typed.register({
         name: 'sidebar.right.tab.document',
         key: VIDEO_PREVIEW_ID,
         locale: 'manim',
