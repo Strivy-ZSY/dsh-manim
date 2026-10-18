@@ -21,7 +21,8 @@
     "skills",
     "templates",
     "tools",
-    "README.md"
+    "README.md",
+    "THIRD-PARTY-NOTICES.md"
   ],
   "dsh": {
     "client": {

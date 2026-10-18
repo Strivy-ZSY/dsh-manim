@@ -229,6 +229,23 @@ node tools/check-panel-markup.mjs    # 把面板 view 渲染成 HTML 串断言�
 
 ---
 
+## 致谢
+
+本插件的动画能力全部来自 **[Manim](https://www.manim.community/)** —— 由
+**The Manim Community Developers** 与 **Grant "3Blue1Brown" Sanderson**（Manim 的创造者）
+以 **MIT** 许可开源（本插件用 `manim==0.22.0`）。`Scene`/`Mobject`/`Animation` 这套抽象、
+以及「用代码控制每一帧」的思路，都是他们的设计。
+
+公式排版用 **matplotlib** 的 mathtext，文字排版用 **ManimPango**，视频编码与音频转换用
+**PyAV**（因此不需要 ffmpeg），旁白可选 **edge-tts**（LGPL-3.0，仅在 `engine='edge'` 时用到，
+不随本仓库分发）。
+
+完整的组件清单、版本与许可见 **[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)**。
+
 ## License
 
-MIT
+本仓库自己的代码（`src/` `lib/` `runtime/manimkit/` `runtime/engine/` `tools/` `skills/`
+`templates/`）以 **MIT** 发布 —— 见 [LICENSE](LICENSE)。
+
+运行时依赖（pip 装进 `runtime/venv` 的 manim / matplotlib / PyAV 等）各自保留其许可，
+本仓库不分发它们；详见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
