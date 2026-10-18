@@ -14,7 +14,7 @@
  */
 
 import { createRequire } from 'node:module'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pathToFileURL } from 'node:url'
@@ -214,6 +214,58 @@ for (const [label, table] of [
   check('view renders: ' + label, error === null, error === null ? '' : String(error.message ?? error).slice(0, 160))
   check('view is not empty: ' + label, html.replace(/<[^>]*>/g, '').trim().length > 0)
 }
+
+// ---------------------------------------------------------------------------
+console.log('[4] no Node API is used without being imported')
+
+// Twice now a route shipped with a bare `spawn` / `randomUUID`, and the panel got
+// "X is not defined" only when the user clicked. Neither the type-checker nor the
+// bundler rejects a global that does not exist. This is the cheap static net.
+const NODE_APIS = [
+  'spawn', 'spawnSync', 'randomUUID', 'createHash', 'existsSync', 'realpathSync',
+  'readFile', 'writeFile', 'appendFile', 'mkdir', 'readdir', 'stat', 'realpath',
+  'basename', 'dirname', 'join', 'relative', 'resolve', 'isAbsolute', 'extname',
+]
+const LF = String.fromCharCode(10)
+const sources = []
+const walkSource = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) { walkSource(path); continue }
+    const isTs = entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')
+    if (isTs) sources.push(path)
+  }
+}
+walkSource(join(root, 'src'))
+
+/** Is `api` called as a bare function (not as a property) anywhere in `text`? */
+function callsBare(text, api) {
+  let from = 0
+  for (;;) {
+    const at = text.indexOf(api, from)
+    if (at === -1) return false
+    from = at + api.length
+    const before = at === 0 ? ' ' : text[at - 1]
+    const after = text.slice(at + api.length).trimStart()
+    const isProperty = before === '.' || before === '_' || /[A-Za-z0-9]/.test(before)
+    if (!isProperty && after.startsWith('(')) return true
+  }
+}
+
+const offenders = []
+for (const file of sources) {
+  const text = readFileSync(file, 'utf8')
+  const importText = text.split(LF).filter((line) => line.startsWith('import ')).join(LF)
+  for (const api of NODE_APIS) {
+    if (!callsBare(text, api)) continue
+    if (importText.includes(api)) continue
+    // A local binding of the same name is not the Node API (`new Promise((resolve) => …)`).
+    const declared = ['const ' + api, 'let ' + api, 'function ' + api, '(' + api + ',', '(' + api + ')', api + ' =']
+    if (declared.some((needle) => text.includes(needle))) continue
+    offenders.push(file.replace(root, '') + ': ' + api)
+  }
+}
+check('every Node API used in src is imported', offenders.length === 0, offenders.join(', '))
 
 // ---------------------------------------------------------------------------
 // The panel must land in the workspace whose session is on screen — the exact

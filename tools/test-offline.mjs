@@ -265,6 +265,22 @@ check('POST /session-root answers a path or null (never throws)',
   && (sessionRootResponse.body.value?.path === null || typeof sessionRootResponse.body.value?.path === 'string'),
   JSON.stringify(sessionRootResponse.body).slice(0, 160))
 
+// The renderer-install routes must answer even when nothing is running: they are
+// what the panel's progress bar polls.
+const setupStatus = await post('/dsh-manim/runtime/setup-status', {})
+check('POST /runtime/setup-status answers a state',
+  ['idle', 'running', 'done', 'failed'].includes(setupStatus.body.value?.state),
+  JSON.stringify(setupStatus.body).slice(0, 160))
+
+const logged = await post('/dsh-manim/client-log', { where: 'offline-test', message: 'hello', stack: '' })
+check('POST /client-log accepts an entry', logged.body.value?.logged === true, JSON.stringify(logged.body).slice(0, 160))
+
+check('pip output is parsed into a phase',
+  mod.parseSetupProgress('Collecting manim==0.22.0')?.phase === '下载依赖'
+  && mod.parseSetupProgress('Installing collected packages: manim')?.phase === '安装依赖'
+  && mod.parseSetupProgress('Successfully installed manim-0.22.0')?.phase === '完成'
+  && mod.parseSetupProgress('  something else') === null)
+
 const listResponse = await post('/dsh-manim/list', { root: workspace })
 check('POST /list answers the envelope', listResponse.body.ok === true, JSON.stringify(listResponse.body).slice(0, 200))
 check('POST /list returns the scanned scene', listResponse.body.value?.scenes?.some((entry) => entry.rel === 'animations/offline_demo.py') === true)

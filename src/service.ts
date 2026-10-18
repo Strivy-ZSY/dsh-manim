@@ -24,7 +24,7 @@
  * @module dsh-manim/service
  */
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { appendFile, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
@@ -66,6 +66,31 @@ const MAX_SCAN_DEPTH = 5
 const MAX_SCAN_FILES = 600
 /** Cap on a file read while scanning (a 40 MB generated module is not a scene). */
 const MAX_SCAN_BYTES = 512 * 1024
+
+/** One step the pip output implies. */
+export interface SetupStep {
+  kind: 'collecting' | 'installing' | 'installed'
+  phase: string
+  percent: number
+}
+
+/**
+ * Read one line of `pip install` output as a progress step.
+ *
+ * pip offers no machine-readable progress when its stdout is a pipe (`--progress-bar
+ * raw` was removed), so the phase and a rough percentage are derived from the
+ * lines it does print. Rough is fine — the bar exists to prove the install is
+ * moving, not to be a precise measurement.
+ *
+ * @param line - one line of pip output.
+ * @returns the step, or `null` for output that carries none.
+ */
+export function parseSetupProgress(line: string): SetupStep | null {
+  if (/^Collecting /i.test(line)) return { kind: 'collecting', phase: '下载依赖', percent: 0 }
+  if (/Installing collected packages/i.test(line)) return { kind: 'installing', phase: '安装依赖', percent: 90 }
+  if (/Successfully installed/i.test(line)) return { kind: 'installed', phase: '完成', percent: 99 }
+  return null
+}
 
 /** Cap on the client-failure log; the tail is kept, the head is dropped. */
 const CLIENT_LOG_LIMIT = 256 * 1024
@@ -1107,16 +1132,15 @@ export class ManimService {
       const text = String(chunk)
       job.tail = (job.tail + text).slice(-2000)
       for (const line of text.split(String.fromCharCode(10))) {
-        if (/^Collecting /i.test(line)) {
+        const step = parseSetupProgress(line)
+        if (step === null) continue
+        if (step.kind === 'collecting') {
           job.collected += 1
-          job.phase = '下载依赖'
+          job.phase = step.phase
           job.percent = Math.min(85, 5 + job.collected * 2)
-        } else if (/Installing collected packages/i.test(line)) {
-          job.phase = '安装依赖'
-          job.percent = Math.max(job.percent, 90)
-        } else if (/Successfully installed/i.test(line)) {
-          job.phase = '完成'
-          job.percent = 99
+        } else {
+          job.phase = step.phase
+          job.percent = Math.max(job.percent, step.percent)
         }
       }
     }
