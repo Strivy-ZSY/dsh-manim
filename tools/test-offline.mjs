@@ -252,7 +252,10 @@ if (probe.body.value?.pythonPresent === true) {
 }
 
 // ---------------------------------------------------------------------------
-if (!fast) {
+// The real render needs the plugin venv; skip loudly when it is absent instead of
+// dereferencing an undefined video path (that crashed on a fresh checkout).
+const runtimeReady = probe.body.value?.pythonPresent === true
+if (!fast && runtimeReady) {
   console.log('\n[7] real render (draft) — this is the slow one')
   // -------------------------------------------------------------------------
 
@@ -421,7 +424,8 @@ if (!fast) {
   const envResult = await sceneTool.execute({ action: 'env', root: workspace })
   check('manim_scene env reports the runtime', envResult.ok === true && envResult.detail.includes('0.22.0'), envResult.summary)
 } else {
-  console.log('\n[7] render case skipped (--fast)')
+  const why = fast ? '--fast' : 'no runtime/venv - run npm run setup:runtime'
+  console.log('[7] real render SKIPPED (' + why + ')')
 }
 
 // ---------------------------------------------------------------------------

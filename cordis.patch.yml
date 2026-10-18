@@ -1,0 +1,19 @@
+# dsh-manim —— 组合包（bundle）patch。
+#
+# DSH 通过 package.json 的 `dsh.bundle.patch` 找到这份文件，并在启用本组合包时
+# 把下面这一行插进 profile：加载器按**包名**解析入口（lib/index.js），
+# 浏览器半边也因「行说明符 === 包名」而被 dsh-client-modules 挂载
+# （它只认说明符恰为包名的那一行，写路径不会挂上）。
+#
+# 所有 config 键都有默认值，省略即用默认：
+#   - insert:
+#       - id: dsh-manim
+#         name: 'dsh-manim'
+#         config:
+#           defaultQuality: 1080p60
+#           outputDir: animations
+#           agentTools: ['*']          # 或 [] 关掉模型可见的工具
+#           maxInflightEncoders: 4
+- insert:
+    - id: dsh-manim
+      name: 'dsh-manim'

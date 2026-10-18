@@ -69,17 +69,34 @@ node runtime/setup-runtime.mjs --check          # 只检查，不安装
 node runtime/setup-runtime.mjs --python <exe>   # 指定基础解释器
 ```
 
-### 挂进 DSH
+### 装进 DSH
 
-在 profile 的 patch 文件里加一条 insert，指向这份 checkout 的入口：
+**官方客户端（推荐）** —— 侧栏「插件」→「添加插件」，把仓库地址贴进「包名或地址」→ 安装 → 启用：
+
+```
+https://github.com/Strivy-ZSY/dsh-manim
+```
+
+本仓库是一个**组合包（bundle）**：`package.json` 里声明 `dsh.bundle.patch`，随包带一份
+`cordis.patch.yml`。DSH 安装后按**包名**插入一行并挂载浏览器半边，**不需要手改任何 profile 文件**。
+
+**本地开发**（`pnpm add <本地目录>`，或手工在 profile patch 里加一行）：
 
 ```yaml
 - insert:
     - id: dsh-manim
-      name: '<绝对路径>/dsh-manim/lib/index.js'
+      name: 'dsh-manim'      # 必须是包名：浏览器半边只认「行说明符 === 包名」
 ```
 
-首次加载后，左侧栏出现「动画」行，右侧栏出现「动画工作室」tab，四个 `manim_*` 工具进入会话工具表。
+**首次使用还要建渲染运行时**（一次性，约 500 MB 的 Python 依赖，装进插件自己的 `runtime/venv`）：
+
+```bash
+cd <安装目录>/node_modules/dsh-manim
+node runtime/setup-runtime.mjs
+```
+
+装好后：左侧栏出现「动画」行，右侧栏出现「动画工作室」tab，四个 `manim_*` 工具进入会话工具表。
+运行时没建时面板会报「运行时未就绪」并给出解释器路径 —— 跑上面那条命令即可，不需要重装插件。
 
 ---
 
@@ -241,6 +258,8 @@ node tools/check-panel-markup.mjs    # 把面板 view 渲染成 HTML 串断言�
 
 - 公式走位图（`mathtex()`），大幅推近会糊；要矢量公式就得装可用的 LaTeX
 - plan 阶段会把 `construct()` 跑两遍（同进程，省掉再 import manim 的 ~8 秒）
+- **运行时需手工建一次**：插件安装不会自动 `pip install`（那会在 `pnpm install` 里触发构建脚本审批，
+  且 500 MB 下载不该藏在一个静默依赖步骤里）——首次要跑 `node runtime/setup-runtime.mjs`
 - 任务表在内存里：宿主重启丢任务记录，但成片与索引在磁盘上，面板重开还能播
 - 没有 GPU 加速（cairo 渲染器），4K60 很慢
 
