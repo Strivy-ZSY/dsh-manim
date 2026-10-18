@@ -262,6 +262,8 @@ export interface StudioViewProps {
   runtimeHint?: string
   /** Build the runtime now. */
   onSetupRuntime?: () => void
+  /** Where the artifacts live, so uninstalling can clean up. */
+  storage?: { cacheDir: string; venvDir: string }
 }
 
 /**
@@ -275,7 +277,7 @@ export function StudioView(props: StudioViewProps): JSX.Element {
     data, selected, sceneClass, quality, job, frames, error, busy, showLog,
     onSelect, onSceneClass, onQuality, onRender, onCancel, onRefresh, onStoryboard,
     onNewScene, onToggleLog, frameUrl, videoUrl, onSeek, videoRef,
-    videoFile, onSelectVideo, runtimeHint, onSetupRuntime,
+    videoFile, onSelectVideo, runtimeHint, onSetupRuntime, storage,
   } = props
 
   const entry = data?.scenes.find((scene) => scene.path === selected) ?? null
@@ -348,6 +350,15 @@ export function StudioView(props: StudioViewProps): JSX.Element {
   return (
     <div className={cx('studio')} data-dsh-manim-pane="">
       {data === null && error === null ? <div className={cx('notice')}>{t('panel.loading')}</div> : null}
+      {storage === undefined ? null : (
+        <p className={cx('muted', 'small')}>
+          {t('storage.line', {
+            cache: storage.cacheDir,
+            venv: storage.venvDir,
+            out: `${data?.root ?? ''}/${data?.outputDir ?? 'animations'}`,
+          })}
+        </p>
+      )}
       {runtimeHint !== undefined && runtimeHint !== ''
         ? (
             <div className={cx('error')}>
@@ -373,7 +384,7 @@ export function StudioView(props: StudioViewProps): JSX.Element {
               variant="ghost"
               icon={<IconFolderOpen />}
               title={t('files.tip')}
-              disabled={renders.length === 0}
+              disabled={renders.length === 0 && diskVideos.length === 0}
               onClick={() => setFileOpen((open) => !open)}
             >
               {t('files.toggle')}
@@ -727,6 +738,8 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
   const [runtimeHint, setRuntimeHint] = useState('')
   /** A runtime build is running right now. */
   const [setupBusy, setSetupBusy] = useState(false)
+  /** Paths worth telling the user about when they uninstall. */
+  const [runtimePaths, setRuntimePaths] = useState<{ cacheDir: string; venvDir: string } | undefined>(undefined)
   const videoRef = useRef<HTMLVideoElement>(null)
   /** Job id whose index refresh has already been requested, so the poll cannot loop. */
   const refreshedFor = useRef<string>('')
@@ -767,6 +780,9 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
       .then((value) => {
         if (!live) return
         setRuntimeHint(value.pythonPresent === true ? '' : t('runtime.missing'))
+        const cache = typeof value.cacheDir === 'string' ? value.cacheDir : ''
+        const venv = typeof value.venvDir === 'string' ? value.venvDir : ''
+        if (cache !== '' || venv !== '') setRuntimePaths({ cacheDir: cache, venvDir: venv })
       })
       .catch(() => { if (live) setRuntimeHint('') })
     return () => { live = false }
@@ -1106,6 +1122,7 @@ export function Studio({ makeApi, sessions }: StudioProps): JSX.Element {
       onSelectVideo={(rel) => setVideoFile(rel)}
       runtimeHint={runtimeHint}
       onSetupRuntime={() => void setupRuntime()}
+      storage={runtimePaths}
     />
   )
 }

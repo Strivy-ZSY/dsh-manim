@@ -431,6 +431,12 @@ const withDiskVideos = render({
   quality: 'draft',
 })
 const diskMenu = menuItems('fileMenu')
+// The button that opens the menu was gated on the *index* alone, so a workspace
+// full of films still showed a disabled 文件 button — the exact report.
+const filesButton = (withDiskVideos.match(/<button[^>]*>(?:(?!<\/button>)[\s\S])*?文件(?:(?!<\/button>)[\s\S])*?<\/button>/) ?? [''])[0]
+check('the 文件 button is enabled when only disk films exist',
+  filesButton !== '' && !/disabled/.test(filesButton),
+  filesButton.slice(0, 200))
 check('a film on disk appears in the 文件 menu',
   (diskMenu ?? []).some((item) => item.id === 'file:animations/Intro-1080p60.mp4'),
   JSON.stringify(diskMenu).slice(0, 200))

@@ -45,6 +45,9 @@ const SKIP_DIRS = new Set([
   'manim-main', 'manim', 'example_scenes', 'examples', 'tests', 'test',
 ])
 
+/** Video extensions the panel can play. */
+const VIDEO_FILE = /\.(mp4|webm|mov|m4v)$/i
+
 /** Files that mark a directory as a package checkout rather than a scene folder. */
 const LIBRARY_MARKERS = ['pyproject.toml', 'setup.py', 'setup.cfg']
 
@@ -1003,24 +1006,52 @@ export class ManimService {
    * @returns films newest first.
    */
   async scanVideos(root: string): Promise<Array<{ rel: string; name: string; at: number; size: number }>> {
-    const dir = join(root, this.config.outputDir)
-    let names: string[]
-    try {
-      names = (await readdir(dir)).filter((name) => /\.(mp4|webm|mov|m4v)$/i.test(name))
-    } catch {
-      return []
-    }
     const found: Array<{ rel: string; name: string; at: number; size: number }> = []
-    for (const name of names) {
-      const abs = join(dir, name)
+    const seen = new Set<string>()
+
+    /** Collect video files in one directory, non-recursively. */
+    const collect = async (dir: string): Promise<void> => {
+      let names: string[]
       try {
-        const info = await stat(abs)
-        if (!info.isFile()) continue
-        found.push({ rel: `${this.config.outputDir}/${name}`, name, at: info.mtimeMs, size: info.size })
+        names = (await readdir(dir)).filter((name) => VIDEO_FILE.test(name))
       } catch {
-        // A file that vanished between readdir and stat is simply not listed.
+        return
+      }
+      for (const name of names) {
+        const abs = join(dir, name)
+        if (seen.has(abs)) continue
+        seen.add(abs)
+        try {
+          const info = await stat(abs)
+          if (!info.isFile()) continue
+          found.push({ rel: relative(root, abs).replaceAll(String.fromCharCode(92), '/'), name, at: info.mtimeMs, size: info.size })
+        } catch {
+          // A file that vanished between readdir and stat is simply not listed.
+        }
       }
     }
+
+    // The output directory is where renders land; the rest of the workspace is
+    // scanned too (bounded) because a film moved to `exports/` or the workspace
+    // root is still "a film this workspace has".
+    await collect(join(root, this.config.outputDir))
+    const walk = async (dir: string, depth: number): Promise<void> => {
+      if (depth > 3) return
+      let entries: Awaited<ReturnType<typeof readdir>>
+      try {
+        entries = await readdir(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        if (SKIP_DIRS.has(entry.name) || entry.name.startsWith('.')) continue
+        const child = join(dir, entry.name)
+        await collect(child)
+        await walk(child, depth + 1)
+      }
+    }
+    await walk(root, 1)
     return found.sort((a, b) => b.at - a.at)
   }
 
@@ -1099,6 +1130,9 @@ export class ManimService {
       driverPresent: existsSync(this.config.driverPath),
       cacheDir: this.config.cacheDir,
       pluginRoot: PLUGIN_ROOT,
+      // Shown in the panel so a user who uninstalls knows what to delete: the
+      // renderer (~500 MB) and the render cache both live outside the workspace.
+      venvDir: dirname(this.config.pythonPath),
     }
     if (!base.pythonPresent) {
       const value = {

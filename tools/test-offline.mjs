@@ -199,6 +199,14 @@ check('gate accepts a registered workspace', gate.ok === true, JSON.stringify(ga
 const outside = await service.gate(path.join(workspace, 'nope', '..', '..', '..'))
 check('gate rejects an unregistered root', outside.ok === false)
 
+// A film moved out of the output directory is still a film this workspace has.
+mkdirSync(path.join(workspace, 'exports'), { recursive: true })
+writeFileSync(path.join(workspace, 'exports', 'exported.mp4'), 'not a real film', 'utf8')
+const scanned = await service.scanVideos(workspace)
+check('scanVideos finds films outside the output directory',
+  scanned.some((entry) => entry.rel === 'exports/exported.mp4'),
+  JSON.stringify(scanned.map((entry) => entry.rel)))
+
 const scenes = await service.listScenes(workspace)
 check('scan finds the scene file', scenes.some((entry) => entry.path === sceneFile), JSON.stringify(scenes.map((entry) => entry.rel)))
 check('scan skips a python file with no Scene', !scenes.some((entry) => entry.rel.endsWith('helper.py')))
