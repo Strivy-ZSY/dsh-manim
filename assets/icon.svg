@@ -1,14 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-9 -9 46 46" width="46" height="46" fill="none" role="img" aria-label="dsh-manim">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-5 -5 38 38" width="38" height="38" fill="none" role="img" aria-label="dsh-manim">
   <title>dsh-manim</title>
   <!--
     动画工作室 的彩色 mark，抽自 src/client/panel-icon.tsx 的 ColorPaths。
     插件页（已安装插件）读包清单的 "icon"，那里没有 CSS 变量和 currentColor，
     所以这里把颜色写死：紫罗兰机身 + 白色播放符号 + 那道"第二层纸"的描边。
 
-    留白（viewBox -9 -9 46 46）是量出来的，不是猜的：官方插件页那几个图标的
-    彩色字形占图块 44–54%，而这个 mark 的墨迹本身宽 23.2/高 20.4 单位，直接放进
-    28 单位的框里会占到 72%——明显比邻居"分量大"。46 单位框把占比压到约 50%，
-    与官方图标一致（同一套度量下 pad 8→53%、pad 10→47%）。
+    留白（viewBox -5 -5 38 38）是量出来的，不是猜的。官方插件页那几个图标的彩色
+    字形占 72px 图块：智能体 31x32（43%x44%）、开发者工具 33x39（46%x54%）。
+    这个 mark 的墨迹本身宽 23.2、高 20.4——**横宽**，所以没法同时对齐宽和高：
+      · 按宽度对齐（viewBox 46）→ 高只剩 42%，看着比别人矮一截
+      · 现在按高度对齐（viewBox 38）→ 42x33，高 46%、宽 58%
+    用户要的是"分量相当"，视觉上先比高度，所以取后者。
+    同一套度量下 pad 4→64%x51%、pad 6→58%x46%、pad 9→50%x42%，要更小就改 viewBox。
   -->
   <path d="M9.6 4.2h11.2a3.4 3.4 0 0 1 3.4 3.4v2.2" stroke="#8b5cf6" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
   <path d="M5.6 6.6h16.8a3.2 3.2 0 0 1 3.2 3.2v8.6a3.2 3.2 0 0 1-3.2 3.2H5.6a3.2 3.2 0 0 1-3.2-3.2v-8.6a3.2 3.2 0 0 1 3.2-3.2Z" fill="#8b5cf6"/>
