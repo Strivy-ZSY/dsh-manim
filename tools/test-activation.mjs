@@ -14,7 +14,7 @@
  */
 
 import { createRequire } from 'node:module'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pathToFileURL } from 'node:url'
@@ -266,6 +266,15 @@ for (const file of sources) {
   }
 }
 check('every Node API used in src is imported', offenders.length === 0, offenders.join(', '))
+
+// The official plugin page draws a package's own mark from the manifest `icon`
+// field (or an `./icon` export); without it the card falls back to the default
+// illustration, which is how this plugin shipped looking like a placeholder.
+const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+check('the manifest declares an icon', typeof manifest.icon === 'string' && manifest.icon !== '')
+check('the declared icon ships with the package',
+  typeof manifest.icon === 'string' && existsSync(join(root, manifest.icon))
+  && (manifest.files ?? []).some((entry) => entry === manifest.icon))
 
 // ---------------------------------------------------------------------------
 // The panel must land in the workspace whose session is on screen — the exact
