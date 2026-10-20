@@ -1,9 +1,6 @@
 # dsh-manim · 动画工作室
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/dsh-manim"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-manim?label=npm&color=blue"></a>
-  <a href="https://www.npmjs.com/package/dsh-manim"><img alt="npm monthly downloads" src="https://img.shields.io/npm/dm/dsh-manim?label=%E6%9C%88%E4%B8%8B%E8%BD%BD&color=brightgreen"></a>
-  <a href="https://www.npmjs.com/package/dsh-manim"><img alt="total downloads" src="https://img.shields.io/npm/dt/dsh-manim?label=%E6%80%BB%E4%B8%8B%E8%BD%BD&color=success"></a>
   <a href="https://github.com/Strivy-ZSY/dsh-manim"><img alt="stars" src="https://img.shields.io/github/stars/Strivy-ZSY/dsh-manim?style=social"></a>
   <a href="https://github.com/Strivy-ZSY/dsh-manim/blob/main/LICENSE"><img alt="license" src="https://img.shields.io/github/license/Strivy-ZSY/dsh-manim?color=orange"></a>
   <a href="https://github.com/Strivy-ZSY/dsh-manim"><img alt="repo size" src="https://img.shields.io/github/repo-size/Strivy-ZSY/dsh-manim"></a>
